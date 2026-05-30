@@ -3,8 +3,13 @@ from flask_cors import CORS
 import pandas as pd
 import logging
 import os
+import json
 from pathlib import Path
 from ratefluencer_engine import RatefluencerEngine
+from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -14,8 +19,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Enable CORS to allow the frontend (localhost:5173) to communicate with the API
 CORS(app)
+
+# Groq client — reads GROQ_API_KEY from .env
+groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 # Get absolute path to backend directory
 BACKEND_DIR = Path(__file__).parent.absolute()
@@ -221,6 +228,146 @@ def match_creators():
         return jsonify({"error": str(e)}), 400
 
 
+def _parse_groq_json(raw: str) -> dict:
+    """Extract and parse the first JSON object from a Groq response string."""
+    start = raw.find('{')
+    end = raw.rfind('}') + 1
+    if start >= 0 and end > start:
+        return json.loads(raw[start:end])
+    return {}
+
+
+@app.route("/api/generate-content", methods=["POST"])
+def generate_content():
+    """Generate viral reel idea, script, caption, and hashtags for a given topic."""
+    try:
+        data = request.get_json() or {}
+        topic = data.get("topic", "").strip()
+
+        if not topic:
+            return jsonify({"error": "topic is required"}), 400
+
+        logger.info(f"Generating viral content for topic: '{topic}'")
+
+        prompt = f"""You are a viral social media content strategist specialising in Instagram Reels.
+Generate viral content for this topic: "{topic}"
+
+Return ONLY a valid JSON object with these exact keys (no extra text):
+{{
+  "trend_score": <integer 0-100, how trending this topic is right now>,
+  "reel_idea": "<1-2 sentence creative reel concept>",
+  "script": "<60-second reel script with hook, body, and CTA>",
+  "caption": "<engaging Instagram caption under 150 words>",
+  "hashtags": "<10-15 relevant hashtags separated by spaces>",
+  "virality_score": <integer 0-100, predicted virality>
+}}"""
+
+        response = groq_client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1024,
+        )
+
+        raw = response.choices[0].message.content.strip()
+        result = _parse_groq_json(raw)
+
+        if not result:
+            return jsonify({"error": "Failed to parse AI response"}), 500
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Content generation failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/run-agent", methods=["POST"])
+def run_agent():
+    """Autonomous agent: discover trend → find influencer → generate content → predict success."""
+    try:
+        data = request.get_json() or {}
+        goal = data.get("goal", "").strip()
+
+        if not goal:
+            return jsonify({"error": "goal is required"}), 400
+
+        logger.info(f"Running autonomous agent for goal: '{goal}'")
+
+        CREATOR_NAMES = ["Aarav Mehta", "Ananya Sharma", "Kabir Kapoor",
+                         "Pooja Malhotra", "Rohan Sen", "Aditi Rao",
+                         "Ishaan Roy", "Kiara Joshi"]
+
+        # Step 1 — Discover trend
+        trend_prompt = f"""You are a social media trend analyst.
+For this campaign goal: "{goal}"
+
+Identify the single most relevant trending topic right now.
+Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentences>"}}"""
+
+        trend_resp = groq_client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[{"role": "user", "content": trend_prompt}],
+            temperature=0.5,
+            max_tokens=150,
+        )
+        trend_data = _parse_groq_json(trend_resp.choices[0].message.content.strip())
+        trend = trend_data.get("trend", "Sustainable lifestyle and wellness content is surging across Gen-Z audiences.")
+
+        # Step 2 — Find best influencer via ML engine
+        match_results = engine.brand_matcher.match(
+            brand_campaign=goal,
+            top_k=10,
+            min_confidence=0.05
+        )
+
+        best_creator = None
+        for match in match_results.get("top_matches", []):
+            creator_id = int(match["creator_id"])
+            score_res = engine.score_creator(creator_id=creator_id, campaign_text=goal)
+            if score_res["risk_metrics"]["risk_level"] != "High":
+                score_res["display_name"] = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
+                best_creator = score_res
+                break
+
+        influencer_name = best_creator["display_name"] if best_creator else "Ananya Sharma"
+        virality_score = int(best_creator["scores"]["growth_score"]) if best_creator else 72
+        campaign_success = int(best_creator["success_probability"] * 100) if best_creator else 75
+
+        # Step 3 — Generate content for that influencer
+        content_prompt = f"""You are a viral content creator for Instagram.
+Campaign goal: {goal}
+Trending topic: {trend}
+Assigned influencer: {influencer_name}
+
+Generate a reel idea and a caption tailored to this influencer and trend.
+Return ONLY JSON (no other text):
+{{
+  "reel_idea": "<creative 1-2 sentence reel concept>",
+  "caption": "<engaging Instagram caption under 100 words>"
+}}"""
+
+        content_resp = groq_client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[{"role": "user", "content": content_prompt}],
+            temperature=0.7,
+            max_tokens=400,
+        )
+        content_data = _parse_groq_json(content_resp.choices[0].message.content.strip())
+
+        return jsonify({
+            "trend":           trend,
+            "influencer":      influencer_name,
+            "reel_idea":       content_data.get("reel_idea", "Create an authentic day-in-the-life reel showcasing real product use."),
+            "caption":         content_data.get("caption", "Real results, real people. Discover the difference. #sponsored"),
+            "virality_score":  virality_score,
+            "campaign_success": campaign_success,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Agent run failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
-    # Start the Flask app
     app.run(debug=True, port=5000)
