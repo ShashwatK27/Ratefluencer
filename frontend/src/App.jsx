@@ -7,6 +7,8 @@ import LandingPage from './pages/LandingPage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Campaign from './pages/Campaign.jsx';
 import Recommendations from './pages/Recommendations.jsx';
+import ViralLab from './pages/ViralLab.jsx';
+import AIAgent from './pages/AIAgent.jsx';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState('landing');
@@ -79,12 +81,18 @@ export default function App() {
         <Campaign onNavigate={navigate} onCampaignSubmit={handleCampaignSubmit} />
       )}
       {currentPage === 'recommendations' && (
-        <Recommendations 
-          campaignMeta={campaignMeta} 
-          recos={recos} 
-          insights={insights} 
-          onNavigate={navigate} 
+        <Recommendations
+          campaignMeta={campaignMeta}
+          recos={recos}
+          insights={insights}
+          onNavigate={navigate}
         />
+      )}
+      {currentPage === 'viralLab' && (
+        <ViralLab onNavigate={navigate} />
+      )}
+      {currentPage === 'aiAgent' && (
+        <AIAgent onNavigate={navigate} />
       )}
 
       {loading && (

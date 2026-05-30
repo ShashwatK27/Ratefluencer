@@ -5,6 +5,8 @@ const LINKS = [
   { id: 'dashboard',       label: 'Dashboard' },
   { id: 'campaign',        label: 'Campaign'  },
   { id: 'recommendations', label: 'Results'   },
+  { id: 'viralLab',        label: 'Viral Lab' },
+  { id: 'aiAgent',         label: 'AI Agent'  },
 ];
 
 export default function Navbar({ currentPage, onNavigate }) {
