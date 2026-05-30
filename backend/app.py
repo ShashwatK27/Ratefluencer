@@ -83,6 +83,97 @@ def influencers():
         return jsonify({"error": str(e)}), 400
 
 
+@app.route("/api/search")
+def search_creators():
+    """Search and filter all 50k creators with pagination"""
+    try:
+        # Get query parameters
+        query = request.args.get('q', '').lower()  # Name or handle search
+        niche = request.args.get('niche', '')  # Filter by niche/category
+        min_followers = int(request.args.get('min_followers', 0))
+        max_followers = int(request.args.get('max_followers', float('inf')))
+        min_auth = int(request.args.get('min_auth', 0))
+        min_er = float(request.args.get('min_er', 0.0))
+        sort_by = request.args.get('sort_by', 'followers')  # followers, authenticity, growth, engagement_rate
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+
+        # Start with all creators
+        df = engine.creators_df.copy()
+
+        # Apply filters
+        if query:
+            # Search by niche
+            df = df[df['niche'].str.lower().str.contains(query, na=False)]
+        
+        if niche:
+            df = df[df['niche'].str.lower() == niche.lower()]
+        
+        df = df[(df['followers'] >= min_followers) & (df['followers'] <= max_followers)]
+        df = df[df['authenticity_score'] >= min_auth]
+        df = df[df['engagement_rate'] >= min_er]
+
+        total_count = len(df)
+
+        # Sort
+        if sort_by == 'authenticity':
+            df = df.sort_values('authenticity_score', ascending=False)
+        elif sort_by == 'growth':
+            df = df.sort_values('growth_score', ascending=False)
+        elif sort_by == 'engagement_rate':
+            df = df.sort_values('engagement_rate', ascending=False)
+        else:  # followers (default)
+            df = df.sort_values('followers', ascending=False)
+
+        # Pagination
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_df = df.iloc[start:end]
+
+        # Format results
+        result_list = []
+        for idx, (_, row) in enumerate(paginated_df.iterrows()):
+            creator_id = int(row['creator_id'])
+            c_name = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
+            c_handle = f"@{c_name.lower().replace(' ', '_')}"
+            
+            followers_val = int(row['followers'])
+            if followers_val >= 1_000_000:
+                followers_str = f"{followers_val / 1_000_000:.1f}M"
+            elif followers_val >= 1_000:
+                followers_str = f"{followers_val / 1_000:.0f}K"
+            else:
+                followers_str = str(followers_val)
+
+            result_list.append({
+                "id": creator_id,
+                "name": c_name,
+                "handle": c_handle,
+                "cat": str(row['niche']),
+                "followers": followers_str,
+                "followersRaw": followers_val,
+                "er": f"{float(row['engagement_rate']):.1f}%",
+                "erRaw": float(row['engagement_rate']),
+                "auth": int(row['authenticity_score']),
+                "growth": int(row['growth_score']),
+                "score": int(row['growth_score'] * 0.5 + row['authenticity_score'] * 0.5),
+                "fake": int(row['fake_account']),
+                "av": "".join([part[0] for part in c_name.split()]),
+            })
+
+        return jsonify({
+            "results": result_list,
+            "total": total_count,
+            "page": page,
+            "limit": limit,
+            "pages": (total_count + limit - 1) // limit
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/api/match", methods=["POST"])
 def match_creators():
     try:

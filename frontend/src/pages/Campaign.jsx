@@ -86,7 +86,7 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
 
         <div style={{ marginBottom: '3rem' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', marginBottom: '8px' }}>Create Campaign</h2>
-          <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze thousands of creators and recommend the best fit.</p>
+          <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze 50,000+ creators and recommend the best fit.</p>
         </div>
 
         {/* Basics */}

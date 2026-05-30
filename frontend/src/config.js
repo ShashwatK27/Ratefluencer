@@ -13,6 +13,7 @@ export const config = {
     endpoints: {
       influencers: `${API_URL}/api/influencers`,
       match: `${API_URL}/api/match`,
+      search: `${API_URL}/api/search`,
     }
   },
   app: {
