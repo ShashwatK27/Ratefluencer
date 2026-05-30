@@ -1,0 +1,12 @@
+id,category,bio,followers,engagement_rate,verified,pos,flw,flg,bl,lin,cl,cz,ni,erl,erc,lt,hc,pr,pi
+CR_001,tech,"Tech reviewer focusing on budget smartphones, PC builds, and software tutorials.",150000,0.058,1,,,,,,,,,,,,,,
+CR_002,beauty,"Lifestyle and beauty vlogger. Daily makeup routines, fashion hauls, and skincare.",200000,0.072,0,,,,,,,,,,,,,,
+CR_003,fitness,"Fitness coach sharing home workout routines, protein recipes, and gym advice.",120000,0.045,0,,,,,,,,,,,,,,
+CR_004,travel,"Travel vlogger documenting solo backpacking trips, street food, and budget hostels in Asia.",180000,0.063,1,,,,,,,,,,,,,,
+CR_005,gaming,Gamer playing competitive FPS games and reviewing high-end gaming peripherals.,95000,0.052,0,,,,,,,,,,,,,,
+CR_006,hardware,PC hardware enthusiast building custom water-cooled rigs and benchmarking GPUs.,75000,0.068,0,,,,,,,,,,,,,,
+CR_007,finance,"Personal finance expert teaching stock market investing, crypto trading, and budgeting.",220000,0.055,1,,,,,,,,,,,,,,
+CR_008_FAKE,beauty,skincare skincare skincare buying serums makeup tips follow back comments,310000,0.005,0,20.0,310000.0,300000.0,80.0,0.0,85.0,95.0,1.0,10.0,450.0,2.0,150.0,0.1,0.0
+CR_009,wellness,"Yoga and mindfulness instructor focusing on mental health, meditation, and flexibility.",140000,0.067,0,,,,,,,,,,,,,,
+CR_010,food,"Vegan recipe chef creating plant-based meals and promoting a healthy, sustainable diet.",165000,0.074,1,,,,,,,,,,,,,,
+CR_016,fashion,"Sustainable fashion advocate focusing on thrifting, upcycling clothes, and eco-friendly living.",135000,0.076,0,,,,,,,,,,,,,,
