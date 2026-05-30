@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { recommendations, aiInsights } from '../data/index.js';
 
 function ScoreRing({ score, color, offset }) {
@@ -16,7 +16,7 @@ function ScoreRing({ score, color, offset }) {
   );
 }
 
-function RecoCard({ rec, onShortlist }) {
+function RecoCard({ rec, shortlisted, onShortlist }) {
   const rankBorder =
     rec.rank === 1 ? 'rgba(240,201,106,0.3)' :
     rec.rank === 2 ? 'rgba(104,184,240,0.2)' :
@@ -27,10 +27,10 @@ function RecoCard({ rec, onShortlist }) {
     : 'var(--bg2)';
 
   const scoreItems = [
-    { label: 'Ratefluencer™', val: rec.ratefluencer, color: 'var(--accent)' },
-    { label: 'Growth',       val: (rec.growth !== undefined ? rec.growth : rec.virality) + '%',  color: 'var(--gold)'   },
-    { label: 'Authenticity',  val: (rec.authenticity !== undefined ? rec.authenticity : 85) + '%', color: 'var(--blue)' },
-    { label: 'Brand Match',   val: (rec.brandMatch !== undefined ? rec.brandMatch : 90) + '%', color: 'var(--coral)'  },
+    { label: 'Ratefluencer™', val: rec.ratefluencer,                                                color: 'var(--accent)' },
+    { label: 'Growth',        val: (rec.growth      !== undefined ? rec.growth      : rec.virality) + '%', color: 'var(--gold)'   },
+    { label: 'Authenticity',  val: (rec.authenticity !== undefined ? rec.authenticity : 85)         + '%', color: 'var(--blue)'   },
+    { label: 'Brand Match',   val: (rec.brandMatch  !== undefined ? rec.brandMatch  : 90)           + '%', color: 'var(--coral)'  },
   ];
 
   return (
@@ -58,6 +58,7 @@ function RecoCard({ rec, onShortlist }) {
         <div style={{ fontSize: '18px', fontWeight: 500, marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           {rec.name}
           {rec.badge && <span className="tag tag-gold" style={{ fontSize: '11px', verticalAlign: 'middle' }}>{rec.badge}</span>}
+          {shortlisted && <span className="tag tag-green" style={{ fontSize: '11px' }}>✓ Shortlisted</span>}
         </div>
         <div style={{ fontSize: '13px', color: 'var(--text3)', marginBottom: '12px' }}>{rec.meta}</div>
         <div style={{ display: 'flex', gap: '1.5rem' }}>
@@ -81,27 +82,55 @@ function RecoCard({ rec, onShortlist }) {
       {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
         <ScoreRing score={rec.ratefluencer} color={rec.ringColor} offset={rec.ringOffset} />
+        {/* Fix #8: toggle shortlist state; Fix #9: no-print class */}
         <button
-          className={`btn ${rec.rank === 1 ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+          className={`btn ${shortlisted ? 'btn-ghost' : rec.rank === 1 ? 'btn-primary' : 'btn-ghost'} btn-sm no-print`}
           onClick={() => onShortlist(rec.name)}
-          style={{ fontSize: '12px' }}
+          style={{ fontSize: '12px', minWidth: '90px' }}
         >
-          Shortlist
+          {shortlisted ? '✓ Remove' : 'Shortlist'}
         </button>
       </div>
     </div>
   );
 }
 
+// Fix #7: parse follower count from meta string like "500K followers" or "1.2M followers"
+function parseFollowers(meta) {
+  const m = (meta || '').match(/([\d.]+)(K|M)/);
+  if (!m) return 0;
+  return parseFloat(m[1]) * (m[2] === 'M' ? 1_000_000 : 1_000);
+}
+
 export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate }) {
-  const { cats = 'Wellness + Skincare', budget = '₹10L', ageGroup = '25–34' } = campaignMeta || {};
+  const { cats = 'Wellness + Skincare', budget = '₹10L', budgetRaw = null, ageGroup = '25–34' } = campaignMeta || {};
+
+  // Fix #8: real shortlist state
+  const [shortlist, setShortlist] = useState([]);
 
   const handleShortlist = (name) => {
-    alert(`✅ ${name} added to shortlist!`);
+    setShortlist(prev =>
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
   };
 
-  const activeRecos = recos && recos.length > 0 ? recos : recommendations;
+  const activeRecos   = recos    && recos.length    > 0 ? recos    : recommendations;
   const activeInsights = insights && insights.length > 0 ? insights : aiInsights;
+
+  // Fix #7: compute dynamic meta strip values
+  const totalFollowers = activeRecos.reduce((sum, r) => sum + parseFollowers(r.meta), 0);
+  const projectedImpressions = Math.round(totalFollowers * 0.12);
+  const impStr = projectedImpressions >= 1_000_000
+    ? `~${(projectedImpressions / 1_000_000).toFixed(1)}M`
+    : `~${(projectedImpressions / 1_000).toFixed(0)}K`;
+
+  const avgConf = activeRecos.length > 0
+    ? Math.round(activeRecos.reduce((sum, r) => sum + (parseInt(r.successProb) || 80), 0) / activeRecos.length)
+    : 94;
+
+  const reachCostStr = budgetRaw
+    ? '₹' + Math.round(Number(budgetRaw) * 0.7).toLocaleString('en-IN')
+    : budget;
 
   return (
     <div style={{ paddingTop: '56px' }}>
@@ -116,20 +145,26 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
               <span style={{ color: 'var(--accent)' }}>{cats} · {budget} budget · India · {ageGroup}</span>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Fix #9: no-print class hides action buttons from PDF */}
+          <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>⬇ Export PDF</button>
             <button className="btn btn-primary btn-sm" onClick={() => onNavigate('campaign')}>New Campaign</button>
           </div>
         </div>
 
-        {/* Meta strip */}
+        {/* Meta strip — Fix #7: all values now dynamic */}
         <div className="fade-up delay-1" style={{
           background: 'var(--bg2)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius)', padding: '1rem 1.5rem',
           fontSize: '13px', color: 'var(--text2)', display: 'flex', gap: '2rem',
           marginBottom: '1.5rem',
         }}>
-          {[[`${activeRecos.length} of 50,000`,'Creators evaluated'],['94.1%','Model confidence'],['₹8.4L','Est. total reach cost'],['~2.8M','Projected impressions']].map(([val, label]) => (
+          {[
+            [`${activeRecos.length} of 50,000`, 'Creators evaluated'],
+            [`${avgConf}%`,                     'Model confidence'],
+            [reachCostStr,                       'Est. total reach cost'],
+            [impStr,                             'Projected impressions'],
+          ].map(([val, label]) => (
             <div key={label}>
               <strong style={{ color: 'var(--text)', display: 'block', fontSize: '15px' }}>{val}</strong>
               {label}
@@ -142,9 +177,45 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
         {/* Recommendation cards */}
         <div className="fade-up delay-2" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '2rem' }}>
           {activeRecos.map(rec => (
-            <RecoCard key={rec.rank} rec={rec} onShortlist={handleShortlist} />
+            <RecoCard
+              key={rec.rank}
+              rec={rec}
+              shortlisted={shortlist.includes(rec.name)}
+              onShortlist={handleShortlist}
+            />
           ))}
         </div>
+
+        {/* Fix #8: shortlist panel */}
+        {shortlist.length > 0 && (
+          <div className="fade-up" style={{
+            background: 'rgba(200,240,104,0.06)', border: '1px solid rgba(200,240,104,0.2)',
+            borderRadius: 'var(--radius)', padding: '1rem 1.5rem',
+            marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '13px', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
+                SHORTLIST ({shortlist.length})
+              </span>
+              {shortlist.map(name => (
+                <span key={name} style={{
+                  fontSize: '12px', padding: '3px 10px', borderRadius: '20px',
+                  background: 'var(--accent-dim)', color: 'var(--accent)',
+                  border: '1px solid rgba(200,240,104,0.2)',
+                }}>
+                  {name}
+                </span>
+              ))}
+            </div>
+            <button
+              className="btn btn-ghost btn-sm no-print"
+              onClick={() => setShortlist([])}
+              style={{ fontSize: '12px', flexShrink: 0 }}
+            >
+              Clear all
+            </button>
+          </div>
+        )}
 
         {/* AI Insights */}
         <div className="section-label" style={{ marginBottom: '12px' }}>AI Campaign Insights</div>
@@ -164,7 +235,9 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
           <div style={{ fontSize: '14px', color: 'var(--text2)', lineHeight: 1.7 }}>
             Based on your campaign parameters, the model predicts a{' '}
             <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
-              {activeRecos.length > 0 && activeRecos[0].successProb ? `${parseInt(activeRecos[0].successProb) - 8}%–${activeRecos[0].successProb}` : '76–88%'} probability of campaign success
+              {activeRecos.length > 0 && activeRecos[0].successProb
+                ? `${parseInt(activeRecos[0].successProb) - 8}%–${activeRecos[0].successProb}`
+                : '76–88%'} probability of campaign success
             </span>,
             defined as achieving the target awareness/conversion KPIs. The XGBoost and RandomForest ensemble considered{' '}
             <strong style={{ color: 'var(--text)' }}>engagement rate, net growth lags, follower-to-following safety ratios, audience quality index, brand-category alignment, and historical posting consistency</strong>{' '}

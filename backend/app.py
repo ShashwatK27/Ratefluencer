@@ -2,11 +2,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import logging
-import os
 from pathlib import Path
 from ratefluencer_engine import RatefluencerEngine
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -14,22 +12,41 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Enable CORS to allow the frontend (localhost:5173) to communicate with the API
 CORS(app)
 
-# Get absolute path to backend directory
 BACKEND_DIR = Path(__file__).parent.absolute()
-# Use the expanded 50,000 creator dataset (50x more variety!)
 CREATORS_CSV = BACKEND_DIR / 'synthetic_influencer_50k.csv'
-# Fallback to original if 50k not available
 if not CREATORS_CSV.exists():
     CREATORS_CSV = BACKEND_DIR / 'synthetic_influencer_v2.csv'
 
-# Initialize Ratefluencer engine at startup
+# Auto-generate the dataset on first run if the CSV doesn't exist
+if not CREATORS_CSV.exists():
+    logger.info(f"{CREATORS_CSV.name} not found — running generator (this takes ~10s)...")
+    from generate_50k_creators import generate_dataset
+    generate_dataset(output_path=str(CREATORS_CSV))
+    logger.info("Dataset generation complete.")
+
 logger.info("Initializing Ratefluencer AI Orchestrator inside Flask server...")
 logger.info(f"Using creators CSV from: {CREATORS_CSV}")
 logger.info(f"Dataset size: {len(pd.read_csv(CREATORS_CSV))} creators")
 engine = RatefluencerEngine(creators_csv=str(CREATORS_CSV))
+
+# 50 names so nearby creator IDs don't collide (Fix #10)
+CREATOR_NAMES = [
+    "Aarav Mehta", "Ananya Sharma", "Kabir Kapoor", "Pooja Malhotra",
+    "Rohan Sen", "Aditi Rao", "Ishaan Roy", "Kiara Joshi",
+    "Neha Verma", "Siddharth Das", "Zoya Khan", "Vikram Gill",
+    "Priya Nair", "Arjun Bose", "Divya Iyer", "Rahul Gupta",
+    "Sneha Patel", "Karan Bajaj", "Meera Krishnan", "Ayaan Sheikh",
+    "Trisha Bansal", "Vivek Reddy", "Aisha Mirza", "Dev Saxena",
+    "Nisha Choudhary", "Rajat Sinha", "Simran Dhawan", "Aditya Joshi",
+    "Kavya Menon", "Nikhil Arora", "Tara Pillai", "Harsh Malhotra",
+    "Riyanshi Shah", "Parth Desai", "Shruti Nambiar", "Gaurav Pandey",
+    "Pallavi Hegde", "Varun Khanna", "Ankita Singh", "Manav Oberoi",
+    "Disha Thakur", "Rishab Chandra", "Natasha Bhat", "Surya Vardhan",
+    "Layla Kapoor", "Aryan Trivedi", "Chithra Rajan", "Mihir Jain",
+    "Tanvi Agarwal", "Saurabh Naik",
+]
 
 
 @app.route("/")
@@ -39,17 +56,12 @@ def home():
 
 @app.route("/api/influencers")
 def influencers():
-    """Returns general featured influencers list (from CSV)"""
     try:
-        # Return a quick list of top authentic creators from the dataset
         sample_creators = engine.creators_df[engine.creators_df['fake_account'] == 0].head(8)
-        names = ["Aarav Mehta", "Ananya Sharma", "Kabir Kapoor", "Pooja Malhotra", "Rohan Sen", "Aditi Rao", "Ishaan Roy", "Kiara Joshi"]
-        
         result_list = []
         for idx, row in enumerate(sample_creators.to_dict('records')):
-            c_name = names[idx % len(names)]
+            c_name = CREATOR_NAMES[int(row['creator_id']) % len(CREATOR_NAMES)]
             c_handle = f"@{c_name.lower().replace(' ', '_')}"
-            
             result_list.append({
                 "id": int(row['creator_id']),
                 "name": c_name,
@@ -65,7 +77,6 @@ def influencers():
                 "c1": "#E1F5EE" if idx % 2 == 0 else "#E6F1FB",
                 "c2": "#085041" if idx % 2 == 0 else "#0C447C"
             })
-            
         return jsonify(result_list), 200
     except Exception as e:
         logger.error(f"Featured influencers load failed: {e}")
@@ -74,89 +85,119 @@ def influencers():
 
 @app.route("/api/match", methods=["POST"])
 def match_creators():
-    """
-    Unified ML RAG Matcher endpoint.
-    
-    Integrates all 3 models (Growth, Authenticity, Brand Match) dynamically.
-    """
     try:
         data = request.get_json() or {}
         campaign_text = data.get("campaign_text", "")
         campaign_goal = data.get("campaign_goal", "balanced")
-        category_filter = data.get("category_filter", None)
+        category_filters = data.get("category_filters", [])  # now a list (Fix #2)
         top_k = int(data.get("top_k", 3))
-        
+
+        # Parse advanced filters (Fix #4)
+        min_auth_str = data.get("min_authenticity", "Any")
+        tier_filter_str = data.get("tier_filter", "All tiers")
+        min_er_str = data.get("min_engagement_rate", "Any")
+        excluded_brands_str = data.get("excluded_brands", "")
+
+        min_auth_val = 0
+        if min_auth_str and min_auth_str != "Any":
+            try:
+                min_auth_val = int(min_auth_str.replace("+", ""))
+            except ValueError:
+                pass
+
+        min_er_val = 0.0
+        if min_er_str and min_er_str != "Any":
+            try:
+                min_er_val = float(min_er_str.replace("%+", ""))
+            except ValueError:
+                pass
+
+        tier_ranges = {
+            "All tiers":        (0, float('inf')),
+            "Nano (1K–10K)":    (1_000, 10_000),
+            "Micro (10K–100K)": (10_000, 100_000),
+            "Macro (100K–1M)":  (100_000, 1_000_000),
+            "Mega (1M+)":       (1_000_000, float('inf')),
+        }
+        tier_min, tier_max = tier_ranges.get(tier_filter_str, (0, float('inf')))
+
+        excluded_niches = [b.strip().lower() for b in excluded_brands_str.split(",") if b.strip()] if excluded_brands_str else []
+
         if not campaign_text:
             return jsonify({"error": "campaign_text parameter is required."}), 400
-            
-        logger.info(f"Received match request for campaign: '{campaign_text[:40]}...' | Goal: {campaign_goal}")
-        
-        # Retrieve candidates from Cosine ChromaDB
+
+        logger.info(f"Match request: '{campaign_text[:40]}...' | Goal: {campaign_goal} | Categories: {category_filters}")
+
         match_results = engine.brand_matcher.match(
             brand_campaign=campaign_text,
-            top_k=top_k * 3,  # query more candidates to account for goal-scoring re-rank
-            category_filter=category_filter,
+            top_k=top_k * 3,
+            category_filters=category_filters if category_filters else None,  # Fix #2
             min_confidence=0.05
         )
-        
+
         formatted_recos = []
-        names = ["Aarav Mehta", "Ananya Sharma", "Kabir Kapoor", "Pooja Malhotra", "Rohan Sen", "Aditi Rao", "Ishaan Roy", "Kiara Joshi", "Neha Verma", "Siddharth Das", "Zoya Khan", "Vikram Gill"]
-        
-        # Rerank candidates dynamically
+        all_score_results = []  # Fix #1: collect all scores before filtering
+
         for match in match_results['top_matches']:
             creator_id = int(match['creator_id'])
-            
-            # Predict scores across ALL 3 Models dynamically!
+
             score_res = engine.score_creator(
                 creator_id=creator_id,
                 campaign_text=campaign_text,
                 campaign_goal=campaign_goal
             )
-            
-            # Exclude high-risk/suspicious accounts completely from recommendations
+            all_score_results.append(score_res)  # Fix #1: track before any continue
+
             if score_res['risk_metrics']['risk_level'] == 'High' or score_res['risk_metrics']['is_fake']:
-                logger.info(f"Excluding creator ID {creator_id} from recommendations due to High Fraud Risk.")
+                logger.info(f"Excluding creator {creator_id}: High fraud risk.")
                 continue
-            
+
             final_score = int(score_res['ratefluencer_score'])
-            success_prob = f"{score_res['success_probability'] * 100.0:.0f}%"
             virality = int(score_res['scores']['growth_score'])
             brand_match = int(score_res['scores']['brand_match_score'])
             authenticity = int(score_res['scores']['authenticity_score'])
-            er = f"{score_res['engagement_rate']:.1f}%"
+            er_raw = score_res['engagement_rate']
+            er = f"{er_raw:.1f}%"
             niche = score_res['niche']
             followers_val = score_res['followers']
             risk_level = score_res['risk_metrics']['risk_level']
-            
-            # Follower label formatter
-            if followers_val >= 1000000:
-                followers_str = f"{followers_val / 1000000:.1f}M"
-            elif followers_val >= 1000:
-                followers_str = f"{followers_val / 1000:.0f}K"
+
+            # Apply advanced filters (Fix #4)
+            if authenticity < min_auth_val:
+                logger.info(f"Skipping creator {creator_id}: authenticity {authenticity} < {min_auth_val}")
+                continue
+            if not (tier_min <= followers_val <= tier_max):
+                logger.info(f"Skipping creator {creator_id}: followers {followers_val} outside tier range")
+                continue
+            if er_raw < min_er_val:
+                logger.info(f"Skipping creator {creator_id}: ER {er_raw:.1f}% < {min_er_val}%")
+                continue
+            if excluded_niches and any(excl in niche.lower() for excl in excluded_niches):
+                logger.info(f"Skipping creator {creator_id}: niche '{niche}' matches excluded list")
+                continue
+
+            if followers_val >= 1_000_000:
+                followers_str = f"{followers_val / 1_000_000:.1f}M"
+            elif followers_val >= 1_000:
+                followers_str = f"{followers_val / 1_000:.0f}K"
             else:
                 followers_str = str(followers_val)
-                
-            # Assign presentation variables
-            c_name = names[creator_id % len(names)]
+
+            c_name = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
             c_handle = f"@{c_name.lower().replace(' ', '_')}"
-            
-            # Ring color maps
+
             if final_score >= 80:
-                ring_color = '#C8F068'  # green
+                ring_color = '#C8F068'
             elif final_score >= 60:
-                ring_color = '#68B8F0'  # blue
+                ring_color = '#68B8F0'
             else:
-                ring_color = '#F0C96A'  # yellow
-                
-            # Circle dash offset math
+                ring_color = '#F0C96A'
+
             ring_offset = int(201 * (1.0 - (final_score / 100.0)))
-            
-            why_text = f"✦ Category similarity of {score_res['scores']['brand_match_score']:.0f}% with verified {risk_level.lower()} fraud risk."
-            if risk_level == 'High':
-                why_text = f"⚠️ SUSPICIOUS: Flagged by Authenticity Detector. Do not collaborate."
-            
-            badge_val = "👑 #1 Match" if len(formatted_recos) == 0 else None
-            
+            # Fix #3: removed dead High-risk why_text branch (high-risk already excluded above)
+            why_text = f"❆ Category similarity of {score_res['scores']['brand_match_score']:.0f}% with verified {risk_level.lower()} fraud risk."
+            badge_val = "\U0001f451 #1 Match" if len(formatted_recos) == 0 else None
+
             formatted_recos.append({
                 "rank": len(formatted_recos) + 1,
                 "name": c_name,
@@ -167,60 +208,62 @@ def match_creators():
                 "growth": virality,
                 "authenticity": authenticity,
                 "brandMatch": brand_match,
-                "successProb": success_prob,
+                "successProb": f"{score_res['success_probability'] * 100.0:.0f}%",
                 "engRate": er,
                 "why": why_text,
                 "ringColor": ring_color,
                 "ringOffset": ring_offset,
                 "rankClass": f"rank-{len(formatted_recos) + 1}"
             })
-            
-            # Clamp to requested limit after re-ranking
+
             if len(formatted_recos) >= top_k:
                 break
-                
-        # Generate dynamic Campaign Insights based on matching results
+
         insights = []
-        if len(formatted_recos) > 0:
-            first_creator = formatted_recos[0]
+        if formatted_recos:
+            first = formatted_recos[0]
             insights.append({
-                "icon": "🎯",
+                "icon": "\U0001f3af",
                 "title": "Optimal Allocation",
-                "text": f"Allocate the majority of your budget to {first_creator['name']} ({first_creator['meta'].split(' · ')[1]}) to maximize reach, reserving 10% for highly targeted wellness micro-creators."
+                "text": f"Allocate the majority of your budget to {first['name']} ({first['meta'].split(' · ')[1]}) to maximise reach, reserving 10% for highly targeted micro-creators."
             })
-            
-            suspicious_found = any(m['risk_metrics']['risk_level'] == 'High' for m in [score_res])
+
+            # Fix #1: use all_score_results (not just the last loop variable)
+            suspicious_found = any(
+                s['risk_metrics']['risk_level'] == 'High' or s['risk_metrics']['is_fake']
+                for s in all_score_results
+            )
             if suspicious_found:
                 insights.append({
                     "icon": "⚠️",
                     "title": "Fraud Alert",
-                    "text": "The model successfully isolated suspicious bot accounts. Collaborations with these creators are highly discouraged due to unnatural follower ratios."
+                    "text": "Suspicious bot accounts were detected and excluded from recommendations. The XGBoost model flagged unnatural follower ratios in the candidate pool."
                 })
             else:
                 insights.append({
-                    "icon": "🛡️",
+                    "icon": "\U0001f6e1️",
                     "title": "Safety Verified",
                     "text": "All top recommended profiles are confirmed authentic (Low Risk) by the XGBoost fraud detection model."
                 })
-                
+
+            primary_cat = category_filters[0] if category_filters else 'wellness'
             insights.append({
-                "icon": "💡",
+                "icon": "\U0001f4a1",
                 "title": "Niche Opportunity",
-                "text": f"Micro-creators in the {category_filter or 'wellness'} category show a 2.5× higher save rate and 15% lower CPC than mega-influencers."
+                "text": f"Micro-creators in the {primary_cat} category show a 2.5× higher save rate and 15% lower CPC than mega-influencers."
             })
-            
+
         return jsonify({
             "recommendations": formatted_recos,
             "insights": insights,
             "goal": campaign_goal,
             "timestamp": pd.Timestamp.now().isoformat()
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Campaign matching failed: {e}")
         return jsonify({"error": str(e)}), 400
 
 
 if __name__ == '__main__':
-    # Start the Flask app
     app.run(debug=True, port=5000)

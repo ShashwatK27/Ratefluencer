@@ -113,3 +113,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
   .reco-card { grid-template-columns: 1fr !important; }
   .insights-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ── Print / PDF Export (Fix #9) ── */
+@media print {
+  nav, .no-print { display: none !important; }
+  html, body { background: #fff !important; color: #111 !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+}

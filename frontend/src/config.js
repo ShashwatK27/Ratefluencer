@@ -21,27 +21,4 @@ export const config = {
   }
 };
 
-// Helper function to make API calls with proper error handling
-export const fetchAPI = async (endpoint, options = {}) => {
-  try {
-    const response = await fetch(endpoint, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-      timeout: config.api.timeout,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    throw error;
-  }
-};
-
 export default config;
