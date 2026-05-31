@@ -179,7 +179,7 @@ function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
 }
 
 // ── Main page ────────────────────────────────────────────────────────────────
-export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate }) {
+export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate, onToast }) {
   const { cats = 'Wellness + Skincare', budget = '₹10L', ageGroup = '25–34' } = campaignMeta || {};
   const [shortlisted, setShortlisted] = useState(() => {
     try { return new Set((JSON.parse(localStorage.getItem('ratefluencer_shortlist') || '[]')).map(c => c.name)); }
@@ -207,6 +207,7 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
     const updated = already ? stored.filter(c => c.name !== rec.name) : [...stored, rec];
     localStorage.setItem('ratefluencer_shortlist', JSON.stringify(updated));
     setShortlisted(new Set(updated.map(c => c.name)));
+    if (onToast) onToast(already ? `${rec.name} removed from shortlist` : `${rec.name} added to shortlist`);
   };
 
   return (

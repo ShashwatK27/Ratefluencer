@@ -17,6 +17,11 @@ import PreferencesPage from './pages/PreferencesPage.jsx';
 import InsightsPage from './pages/InsightsPage.jsx';
 import RealCreatorsPage from './pages/RealCreatorsPage.jsx';
 
+function Toast({ message, onDone }) {
+  React.useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t); }, []);
+  return <div className="toast">✓ {message}</div>;
+}
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState('landing');
   const [campaignMeta, setCampaignMeta] = useState(null);
@@ -24,6 +29,10 @@ export default function App() {
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg) => { setToast(msg); };
+  const hideToast = () => setToast(null);
 
   const navigate = (page) => {
     setCurrentPage(page);
@@ -98,6 +107,7 @@ export default function App() {
           recos={recos}
           insights={insights}
           onNavigate={navigate}
+          onToast={showToast}
         />
       )}
       {currentPage === 'viralLab' && (
@@ -127,6 +137,8 @@ export default function App() {
       {currentPage === 'realCreators' && (
         <RealCreatorsPage currentPage={currentPage} onNavigate={navigate} />
       )}
+
+      {toast && <Toast message={toast} onDone={hideToast} />}
 
       {loading && (
         <div style={{
