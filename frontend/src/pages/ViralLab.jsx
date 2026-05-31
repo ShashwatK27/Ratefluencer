@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { config } from "../config.js";
+import ReelAssets from "../components/ReelAssets.jsx";
 
 const IG_COLOR    = "#F07868";          // Instagram pinkish-orange (coral)
 const IG_COLOR_DIM = "rgba(240,120,104,0.12)";
@@ -463,6 +464,10 @@ export default function ViralLab({ onNavigate }) {
                 <ContentCard key={field.key} field={field} result={result} platform={platform} />
               ))}
             </div>
+
+            {platform === "instagram" && (
+              <ReelAssets result={result} category={category} />
+            )}
 
             <FeedbackBar contentKey={`${platform}_${topic}`} result={result} />
           </div>
