@@ -262,12 +262,33 @@ def match_creators():
 
         logger.info(f"Match request: '{campaign_text[:40]}...' | Goal: {campaign_goal} | Categories: {category_filters}")
 
+        # Retrieve more candidates so filtering still leaves enough
+        retrieve_k = top_k * 10 if category_filters else top_k * 3
         match_results = engine.brand_matcher.match(
             brand_campaign=campaign_text,
-            top_k=top_k * 3,
-            category_filters=category_filters if category_filters else None,  # Fix #2
+            top_k=retrieve_k,
+            category_filters=category_filters if category_filters else None,
             min_confidence=0.05
         )
+
+        # Niche-specific name pools so different categories get different-sounding names
+        NICHE_NAMES = {
+            'fitness':       ['Arjun Fitness', 'Priya Lifts', 'Rohan Runs', 'Simran Strong', 'Dev Gains'],
+            'beauty':        ['Ananya Glow', 'Zoya Beauty', 'Kiara Skin', 'Tara Looks', 'Meera Style'],
+            'fashion':       ['Kavya Couture', 'Shruti Trends', 'Pallavi Fashion', 'Disha Chic', 'Natasha Vogue'],
+            'food':          ['Vikram Eats', 'Pooja Cooks', 'Rahul Recipes', 'Aditi Kitchen', 'Neha Bites'],
+            'tech':          ['Siddharth Dev', 'Aditya Code', 'Gaurav Tech', 'Mihir Builds', 'Parth Digital'],
+            'travel':        ['Layla Explore', 'Ayaan Wanders', 'Chithra Travels', 'Surya Roams', 'Tanvi Trips'],
+            'gaming':        ['Rishab Plays', 'Varun Games', 'Aryan Level', 'Manav Quest', 'Harsh XP'],
+            'wellness':      ['Trisha Zen', 'Sneha Calm', 'Ankita Heal', 'Divya Mindful', 'Nisha Flow'],
+            'entertainment': ['Aisha Reels', 'Kabir Viral', 'Ishaan Shorts', 'Karan Clips', 'Aarav Creates'],
+            'music':         ['Riyanshi Beats', 'Saurabh Rhythm', 'Vivek Tunes', 'Rajat Drops', 'Trisha Vibes'],
+        }
+        DEFAULT_NAMES = CREATOR_NAMES
+
+        def get_creator_name(creator_id, niche):
+            pool = NICHE_NAMES.get(niche.lower().strip(), DEFAULT_NAMES)
+            return pool[creator_id % len(pool)]
 
         formatted_recos = []
         all_score_results = []  # Fix #1: collect all scores before filtering
@@ -310,6 +331,12 @@ def match_creators():
                 logger.info(f"Skipping creator {creator_id}: niche '{niche}' matches excluded list")
                 continue
 
+            # Hard category filter — only show creators from selected categories
+            if category_filters:
+                niche_lower = niche.lower()
+                if not any(cf.lower() in niche_lower or niche_lower in cf.lower() for cf in category_filters):
+                    continue
+
             if followers_val >= 1_000_000:
                 followers_str = f"{followers_val / 1_000_000:.1f}M"
             elif followers_val >= 1_000:
@@ -317,8 +344,8 @@ def match_creators():
             else:
                 followers_str = str(followers_val)
 
-            c_name = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
-            c_handle = f"@{c_name.lower().replace(' ', '_')}"
+            c_name = get_creator_name(creator_id, niche)
+            c_handle = f"@{c_name.lower().replace(' ', '_').replace(' ', '_')}"
 
             if final_score >= 80:
                 ring_color = '#C8F068'
