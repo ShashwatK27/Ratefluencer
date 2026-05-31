@@ -99,10 +99,10 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
         <div style={{ marginBottom: '3rem' }}>
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate('landing')}
             style={{ marginBottom: '1.5rem', fontSize: '13px' }}
           >
-            ← Back to Dashboard
+            ← Home
           </button>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', marginBottom: '8px' }}>Create Campaign</h2>
           <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze 33,935 creators and recommend the best fit.</p>

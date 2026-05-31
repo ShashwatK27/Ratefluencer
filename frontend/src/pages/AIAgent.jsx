@@ -18,7 +18,7 @@ const RESULT_FIELDS = [
   { key: "campaign_success", icon: "📈", label: "Campaign Success", suffix: "%" },
 ];
 
-export default function AIAgent() {
+export default function AIAgent({ onNavigate }) {
   const [goal, setGoal] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -87,8 +87,8 @@ export default function AIAgent() {
       <div style={{ maxWidth: "780px", margin: "0 auto", padding: "3rem 2rem" }}>
 
         <div style={{ marginBottom: "3rem" }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('dashboard')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
-            ← Back to Dashboard
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('landing')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
+            ← Home
           </button>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>
             Autonomous AI Agent
