@@ -748,22 +748,31 @@ def match_creators():
 
 def _parse_groq_json(raw: str) -> dict:
     """Extract and parse the first JSON object from a Groq response string."""
+    import re
     start = raw.find('{')
     end = raw.rfind('}') + 1
-    if start >= 0 and end > start:
-        snippet = raw[start:end]
-        try:
-            return json.loads(snippet)
-        except json.JSONDecodeError:
-            # Remove control characters and retry
-            import re
-            cleaned = re.sub(r'[\x00-\x1f\x7f](?<!["\n\t\r])', ' ', snippet)
-            cleaned = re.sub(r'\n', '\\n', cleaned)
-            try:
-                return json.loads(cleaned)
-            except Exception:
-                return {}
-    return {}
+    if start < 0 or end <= start:
+        return {}
+    snippet = raw[start:end]
+    # Try direct parse first
+    try:
+        return json.loads(snippet)
+    except json.JSONDecodeError:
+        pass
+    # Fix unescaped newlines inside JSON string values
+    try:
+        fixed = re.sub(r'(?<!\\)\n', r'\\n', snippet)
+        fixed = re.sub(r'(?<!\\)\r', r'\\r', fixed)
+        return json.loads(fixed)
+    except Exception:
+        pass
+    # Last resort: strip all control chars
+    try:
+        cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', snippet)
+        cleaned = re.sub(r'(?<!\\)\n', r'\\n', cleaned)
+        return json.loads(cleaned)
+    except Exception:
+        return {}
 
 
 @app.route("/api/generate-content", methods=["POST"])
