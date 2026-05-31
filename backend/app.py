@@ -192,13 +192,27 @@ def engagement_score(row):
 
 
 def generated_scores(row, campaign_text, category_filters, campaign_goal):
-    growth_res = engine.growth_predictor.predict(prepare_growth_features(row))
-    auth_res = engine.authenticity_detector.predict(prepare_authenticity_features(row))
+    # Use pre-computed CSV scores when available — ML models give bad results on real data
+    csv_auth   = row.get('authenticity_score')
+    csv_growth = row.get('growth_score')
+    is_fake    = int(row.get('fake_account', 0)) == 1
 
-    growth = float(growth_res['score'])
-    authenticity = float(auth_res['probability_authentic'] * 100.0)
+    if csv_auth is not None and not is_fake:
+        authenticity = clamp(float(csv_auth))
+        risk_level   = 'Low' if authenticity >= 70 else 'Medium' if authenticity >= 50 else 'High'
+    else:
+        auth_res     = engine.authenticity_detector.predict(prepare_authenticity_features(row))
+        authenticity = float(auth_res['probability_authentic'] * 100.0)
+        risk_level   = auth_res['risk_level']
+
+    if csv_growth is not None:
+        growth = clamp(float(csv_growth))
+    else:
+        growth_res = engine.growth_predictor.predict(prepare_growth_features(row))
+        growth     = float(growth_res['score'])
+
     brand_match = live_brand_match(row, campaign_text, category_filters)
-    engagement = engagement_score(row)
+    engagement  = engagement_score(row)
 
     goal = (campaign_goal or 'balanced').lower()
     if 'conversion' in goal or 'sales' in goal or 'download' in goal or 'launch' in goal:
@@ -212,29 +226,26 @@ def generated_scores(row, campaign_text, category_filters, campaign_goal):
 
     final = (
         brand_match * weights['brand'] +
-        growth * weights['growth'] +
+        growth      * weights['growth'] +
         authenticity * weights['auth'] +
-        engagement * weights['engagement']
+        engagement  * weights['engagement']
     )
 
-    if auth_res['risk_level'] == 'High' or auth_res['label'] == 'Fake':
+    if is_fake or risk_level == 'High':
         final *= 0.3
-    elif auth_res['risk_level'] == 'Medium':
+    elif risk_level == 'Medium':
         final *= 0.75
 
     return {
-        'ratefluencer': round(clamp(final), 1),
-        'growth': round(clamp(growth), 1),
-        'authenticity': round(clamp(authenticity), 1),
-        'brand_match': round(clamp(brand_match), 1),
-        'engagement': round(clamp(engagement), 1),
-        'model_confidence': round(clamp(
-            float(auth_res.get('probability_authentic', 0.75)) * 45 +
-            float(growth_res.get('confidence', 0.65)) * 35 +
-            (brand_match / 100.0) * 20
-        ), 1),
-        'risk_level': auth_res['risk_level'],
-        'is_fake': auth_res['label'] == 'Fake',
+        'ratefluencer':    round(clamp(final), 1),
+        'growth':          round(clamp(growth), 1),
+        'authenticity':    round(clamp(authenticity), 1),
+        'brand_match':     round(clamp(brand_match), 1),
+        'engagement':      round(clamp(engagement), 1),
+        'model_confidence': round(clamp(authenticity * 0.45 + growth * 0.35 + brand_match * 0.20), 1),
+        'risk_level':      risk_level,
+        'is_fake':         is_fake,
+        'success_probability': clamp(final) / 100.0,
     }
 
 
