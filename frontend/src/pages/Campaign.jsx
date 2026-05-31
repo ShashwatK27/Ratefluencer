@@ -72,11 +72,23 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
         ? form.selectedCategories.filter(c => c !== label)
         : [...form.selectedCategories, label]
     );
+    setErrors(p => ({ ...p, categories: '' }));
   };
 
   const formatBudget = (v) => '₹' + parseInt(v).toLocaleString('en-IN');
 
+  const [errors, setErrors] = useState({});
+
   const handleAnalyze = () => {
+    const newErrors = {};
+    if (!form.name.trim())  newErrors.name  = 'Campaign name is required';
+    if (!form.brand.trim()) newErrors.brand = 'Brand name is required';
+    if (form.selectedCategories.length === 0) newErrors.categories = 'Select at least one category';
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
     onCampaignSubmit(form);
   };
 
@@ -85,6 +97,13 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
       <div style={{ maxWidth: '780px', margin: '0 auto', padding: '3rem 2rem' }}>
 
         <div style={{ marginBottom: '3rem' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => onNavigate('dashboard')}
+            style={{ marginBottom: '1.5rem', fontSize: '13px' }}
+          >
+            ← Back to Dashboard
+          </button>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', marginBottom: '8px' }}>Create Campaign</h2>
           <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze 33,935 creators and recommend the best fit.</p>
         </div>
@@ -93,10 +112,22 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
         <FormCard title="📋 Campaign Basics">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <FormGroup label="Campaign Name" full>
-              <input type="text" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Diwali 2025 — Skincare Launch" />
+              <input
+                type="text" value={form.name}
+                onChange={e => { set('name', e.target.value); setErrors(p => ({...p, name: ''})); }}
+                placeholder="e.g. Diwali 2025 — Skincare Launch"
+                style={errors.name ? { borderColor: 'var(--coral)' } : {}}
+              />
+              {errors.name && <div style={{ color: 'var(--coral)', fontSize: '12px', marginTop: '4px' }}>⚠ {errors.name}</div>}
             </FormGroup>
             <FormGroup label="Brand / Product">
-              <input type="text" value={form.brand} onChange={e => set('brand', e.target.value)} placeholder="e.g. Nykaa Glow Serum" />
+              <input
+                type="text" value={form.brand}
+                onChange={e => { set('brand', e.target.value); setErrors(p => ({...p, brand: ''})); }}
+                placeholder="e.g. Nykaa Glow Serum"
+                style={errors.brand ? { borderColor: 'var(--coral)' } : {}}
+              />
+              {errors.brand && <div style={{ color: 'var(--coral)', fontSize: '12px', marginTop: '4px' }}>⚠ {errors.brand}</div>}
             </FormGroup>
             <FormGroup label="Campaign Goal" full>
               <select value={form.goal} onChange={e => set('goal', e.target.value)}>
@@ -182,6 +213,10 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
               );
             })}
           </div>
+
+          {errors.categories && (
+            <div style={{ color: 'var(--coral)', fontSize: '12px', marginTop: '8px' }}>⚠ {errors.categories}</div>
+          )}
 
           {/* AI suggestion */}
           <div style={{ background: 'linear-gradient(135deg,rgba(200,240,104,0.05),rgba(104,184,240,0.05))', border: '1px solid rgba(200,240,104,0.15)', borderRadius: 'var(--radius)', padding: '1.25rem', marginTop: '1rem', display: 'flex', gap: '12px' }}>

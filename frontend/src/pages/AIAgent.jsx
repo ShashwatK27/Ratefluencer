@@ -87,6 +87,9 @@ export default function AIAgent() {
       <div style={{ maxWidth: "780px", margin: "0 auto", padding: "3rem 2rem" }}>
 
         <div style={{ marginBottom: "3rem" }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('dashboard')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
+            ← Back to Dashboard
+          </button>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>
             Autonomous AI Agent
           </h2>
