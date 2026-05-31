@@ -45,7 +45,7 @@ const STEPS = [
 
 const STATS = [
   { val: '94%',  label: 'Prediction Accuracy' },
-  { val: '50,000', label: 'Creators Analyzed' },
+  { val: '33,935', label: 'Creators Analyzed' },
   { val: '₹0',   label: 'Wasted on Fakes' },
 ];
 

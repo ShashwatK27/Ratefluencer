@@ -34,7 +34,7 @@ export default function App() {
     });
 
     try {
-      const campaignText = `Brand/Product: ${formData.brand || 'General Product'}. Campaign: ${formData.name || 'General Campaign'}. Goal: ${formData.goal}. Target Audience: ${formData.audience || `${formData.gender} aged ${formData.ageGroup} located in ${formData.country}`}. Niche category focus: ${formData.selectedCategories.join(', ')}.`;
+      const campaignText = `Brand/Product: ${formData.brand || 'General Product'}. Campaign: ${formData.name || 'General Campaign'}. Goal: ${formData.goal}. Target Audience: ${formData.audience || `Audience aged ${formData.ageGroup}`}. Niche category focus: ${formData.selectedCategories.join(', ')}.`;
       
       const response = await fetch(config.api.endpoints.match, {
         method: 'POST',
@@ -61,7 +61,7 @@ export default function App() {
       setCurrentPage('recommendations');
     } catch (err) {
       console.error("Failed to fetch matches:", err);
-      setError("AI analysis failed. Loaded static recommendations.");
+      setError("AI analysis failed. No live recommendations were loaded.");
       setRecos([]);
       setInsights([]);
       setCurrentPage('recommendations');

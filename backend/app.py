@@ -2,8 +2,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import logging
+import os
+import math
 from pathlib import Path
-from ratefluencer_engine import RatefluencerEngine
+from growth_predictor import GrowthPredictor
+from authenticity_detector import AuthenticityDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,38 +18,296 @@ app = Flask(__name__)
 CORS(app)
 
 BACKEND_DIR = Path(__file__).parent.absolute()
-CREATORS_CSV = BACKEND_DIR / 'synthetic_influencer_50k.csv'
-if not CREATORS_CSV.exists():
-    CREATORS_CSV = BACKEND_DIR / 'synthetic_influencer_v2.csv'
+PARENT_DIR = BACKEND_DIR.parent
+CREATORS_CSV = BACKEND_DIR / 'influencers_engine_ready.csv'
 
-# Auto-generate the dataset on first run if the CSV doesn't exist
+# Load real influencers data
 if not CREATORS_CSV.exists():
-    logger.info(f"{CREATORS_CSV.name} not found — running generator (this takes ~10s)...")
-    from generate_50k_creators import generate_dataset
-    generate_dataset(output_path=str(CREATORS_CSV))
-    logger.info("Dataset generation complete.")
+    logger.error(f"Real data not found at {CREATORS_CSV}. Please run model_test.ipynb first.")
+    raise FileNotFoundError(f"Missing: {CREATORS_CSV}")
 
 logger.info("Initializing Ratefluencer AI Orchestrator inside Flask server...")
 logger.info(f"Using creators CSV from: {CREATORS_CSV}")
-logger.info(f"Dataset size: {len(pd.read_csv(CREATORS_CSV))} creators")
-engine = RatefluencerEngine(creators_csv=str(CREATORS_CSV))
 
-# 50 names so nearby creator IDs don't collide (Fix #10)
-CREATOR_NAMES = [
-    "Aarav Mehta", "Ananya Sharma", "Kabir Kapoor", "Pooja Malhotra",
-    "Rohan Sen", "Aditi Rao", "Ishaan Roy", "Kiara Joshi",
-    "Neha Verma", "Siddharth Das", "Zoya Khan", "Vikram Gill",
-    "Priya Nair", "Arjun Bose", "Divya Iyer", "Rahul Gupta",
-    "Sneha Patel", "Karan Bajaj", "Meera Krishnan", "Ayaan Sheikh",
-    "Trisha Bansal", "Vivek Reddy", "Aisha Mirza", "Dev Saxena",
-    "Nisha Choudhary", "Rajat Sinha", "Simran Dhawan", "Aditya Joshi",
-    "Kavya Menon", "Nikhil Arora", "Tara Pillai", "Harsh Malhotra",
-    "Riyanshi Shah", "Parth Desai", "Shruti Nambiar", "Gaurav Pandey",
-    "Pallavi Hegde", "Varun Khanna", "Ankita Singh", "Manav Oberoi",
-    "Disha Thakur", "Rishab Chandra", "Natasha Bhat", "Surya Vardhan",
-    "Layla Kapoor", "Aryan Trivedi", "Chithra Rajan", "Mihir Jain",
-    "Tanvi Agarwal", "Saurabh Naik",
-]
+
+class CsvEngine:
+    def __init__(self, creators_csv):
+        self.creators_csv = creators_csv
+        self.creators_df = pd.read_csv(creators_csv)
+        self.brand_matcher = None
+        self.growth_predictor = GrowthPredictor(model_version='v2', use_fallback=True)
+        self.authenticity_detector = AuthenticityDetector(model_version='v2')
+
+    def score_creator(self, *args, **kwargs):
+        raise RuntimeError("Semantic scoring engine is disabled; using CSV scores.")
+
+
+if os.getenv("RATEFLUENCER_USE_SEMANTIC", "0") == "1":
+    from ratefluencer_engine import RatefluencerEngine
+    engine = RatefluencerEngine(creators_csv=str(CREATORS_CSV))
+else:
+    engine = CsvEngine(str(CREATORS_CSV))
+
+logger.info(f"Dataset size: {len(engine.creators_df)} creators")
+
+def creator_identity(row):
+    raw_name = str(row.get('creator_name') or f"creator_{int(row['creator_id'])}").strip()
+    display_name = raw_name.lstrip('@') or f"creator_{int(row['creator_id'])}"
+    handle = raw_name if raw_name.startswith('@') else f"@{display_name.lower().replace(' ', '_')}"
+    return display_name, handle
+
+
+def creator_initials(name):
+    parts = name.replace('_', ' ').replace('.', ' ').split()
+    return "".join(part[0].upper() for part in parts[:2]) or name[:2].upper()
+
+
+def format_followers(followers):
+    followers_val = int(followers)
+    if followers_val >= 1_000_000:
+        return f"{followers_val / 1_000_000:.1f}M"
+    if followers_val >= 1_000:
+        return f"{followers_val / 1_000:.0f}K"
+    return str(followers_val)
+
+
+def tier_range(tier_filter):
+    tier = (tier_filter or "All tiers").lower()
+    if "nano" in tier:
+        return 1_000, 10_000
+    if "micro" in tier:
+        return 10_000, 100_000
+    if "macro" in tier:
+        return 100_000, 1_000_000
+    if "mega" in tier:
+        return 1_000_000, float('inf')
+    return 0, float('inf')
+
+
+def clamp(value, low=0, high=100):
+    return max(low, min(high, value))
+
+
+def prepare_growth_features(row):
+    followers = float(row.get('followers', 10000))
+    er = float(row.get('engagement_rate', 3.0))
+    if er < 1.0:
+        er *= 100.0
+
+    likes = float(row.get('likes', followers * (er / 100.0) * 0.9))
+    comments = float(row.get('comments', followers * (er / 100.0) * 0.1))
+    shares = float(row.get('shares', max(1.0, comments * 0.5)))
+    reach = float(row.get('reach', max(1.0, likes * 12.0)))
+    net_growth = float(max(1.0, followers * (er / 100.0) * 0.08))
+
+    return {
+        'views_7d_avg': reach / 30.0,
+        'likes_7d_avg': likes / 30.0,
+        'comments_7d_avg': comments / 30.0,
+        'shares_7d_avg': shares / 30.0,
+        'engagement_rate_7d': er,
+        'net_growth': net_growth,
+        'net_growth_lag1': net_growth * 0.98,
+        'net_growth_lag2': net_growth * 0.95,
+        'net_growth_lag7': net_growth * 0.90,
+        'growth_rolling_mean_3d': net_growth,
+        'growth_rolling_std_3d': max(1.0, net_growth * 0.03),
+        'growth_momentum': net_growth * 0.01,
+    }
+
+
+def prepare_authenticity_features(row):
+    followers = float(row.get('followers', 10000))
+    is_fake = int(row.get('fake_account', 0)) == 1
+    following = float(followers * (1.5 if is_fake else 0.02))
+
+    return {
+        'pos': float(20 if is_fake else min(250, max(30, row.get('posts', 120) / 50))),
+        'flw': followers,
+        'flg': following,
+        'bl': float(80 if is_fake else 0),
+        'lin': float(0 if is_fake else 1),
+        'cl': float(85 if is_fake else 5),
+        'cz': float(95 if is_fake else 2),
+        'ni': float(1 if is_fake else 10),
+        'erl': float(10 if is_fake else 1500),
+        'erc': float(450 if is_fake else 5),
+        'lt': float(2 if is_fake else 1),
+        'hc': float(150 if is_fake else 15),
+        'pr': float(0.1 if is_fake else 0.95),
+        'fo': float(following / (followers + 1.0)),
+        'cs': float(0.95 if is_fake else 0.2),
+        'pi': float(0 if is_fake else 1),
+    }
+
+
+def live_brand_match(row, campaign_text, category_filters):
+    text = (campaign_text or "").lower()
+    niche = str(row.get('niche', '')).lower()
+    selected = {str(cat).lower() for cat in category_filters or []}
+
+    # Base is low so irrelevant niches score low (15-30 range)
+    score = 15.0
+    if niche in selected:
+        score += 50.0   # direct category pick → 65
+    elif niche and niche in text:
+        score += 33.0   # mentioned in campaign text → 48
+
+    category_terms = {
+        'beauty': {'beauty', 'skincare', 'makeup', 'glow', 'serum', 'cosmetic'},
+        'wellness': {'wellness', 'health', 'yoga', 'mindfulness', 'mental', 'organic'},
+        'fitness': {'fitness', 'gym', 'workout', 'protein', 'training', 'muscle'},
+        'food': {'food', 'recipe', 'cooking', 'vegan', 'restaurant', 'meal'},
+        'fashion': {'fashion', 'style', 'clothing', 'outfit', 'apparel'},
+        'tech': {'tech', 'app', 'software', 'gadget', 'device'},
+        'travel': {'travel', 'hotel', 'tourism', 'trip', 'destination'},
+        'finance': {'finance', 'investing', 'money', 'banking', 'crypto'},
+        'gaming': {'gaming', 'game', 'esports', 'streaming'},
+        'education': {'education', 'learning', 'course', 'student'},
+        'entertainment': {'entertainment', 'music', 'movie', 'comedy'},
+    }
+    terms = category_terms.get(niche, {niche} if niche else set())
+    overlap = sum(1 for term in terms if term and term in text)
+    score += min(20.0, overlap * 5.0)   # up to +20 for keyword overlap
+
+    return round(clamp(score), 2)
+
+
+def engagement_score(row):
+    followers = float(row.get('followers', 0))
+    er = float(row.get('engagement_rate', 0))
+    er_quality = clamp(er * 8.0)
+    audience_quality = clamp(math.log10(max(followers, 10)) * 16.0)
+    return round(er_quality * 0.65 + audience_quality * 0.35, 2)
+
+
+def generated_scores(row, campaign_text, category_filters, campaign_goal):
+    growth_res = engine.growth_predictor.predict(prepare_growth_features(row))
+    auth_res = engine.authenticity_detector.predict(prepare_authenticity_features(row))
+
+    growth = float(growth_res['score'])
+    authenticity = float(auth_res['probability_authentic'] * 100.0)
+    brand_match = live_brand_match(row, campaign_text, category_filters)
+    engagement = engagement_score(row)
+
+    goal = (campaign_goal or 'balanced').lower()
+    if 'conversion' in goal or 'sales' in goal or 'download' in goal or 'launch' in goal:
+        weights = {'brand': 0.25, 'growth': 0.15, 'auth': 0.35, 'engagement': 0.25}
+    elif 'community' in goal or 'niche' in goal:
+        weights = {'brand': 0.50, 'growth': 0.15, 'auth': 0.20, 'engagement': 0.15}
+    elif 'awareness' in goal:
+        weights = {'brand': 0.35, 'growth': 0.20, 'auth': 0.15, 'engagement': 0.30}
+    else:
+        weights = {'brand': 0.40, 'growth': 0.20, 'auth': 0.20, 'engagement': 0.20}
+
+    final = (
+        brand_match * weights['brand'] +
+        growth * weights['growth'] +
+        authenticity * weights['auth'] +
+        engagement * weights['engagement']
+    )
+
+    if auth_res['risk_level'] == 'High' or auth_res['label'] == 'Fake':
+        final *= 0.3
+    elif auth_res['risk_level'] == 'Medium':
+        final *= 0.75
+
+    return {
+        'ratefluencer': round(clamp(final), 1),
+        'growth': round(clamp(growth), 1),
+        'authenticity': round(clamp(authenticity), 1),
+        'brand_match': round(clamp(brand_match), 1),
+        'engagement': round(clamp(engagement), 1),
+        'model_confidence': round(clamp(
+            float(auth_res.get('probability_authentic', 0.75)) * 45 +
+            float(growth_res.get('confidence', 0.65)) * 35 +
+            (brand_match / 100.0) * 20
+        ), 1),
+        'risk_level': auth_res['risk_level'],
+        'is_fake': auth_res['label'] == 'Fake',
+    }
+
+
+def recommendation_from_row(row, rank, scores, fallback=False):
+    c_name, c_handle = creator_identity(row)
+    followers_val = int(row['followers'])
+    final_score = round(scores['ratefluencer'], 1)
+    growth = round(scores['growth'], 1)
+    authenticity = round(scores['authenticity'], 1)
+    brand_match = round(scores['brand_match'], 1)
+
+    if final_score >= 80:
+        ring_color = '#C8F068'
+    elif final_score >= 60:
+        ring_color = '#68B8F0'
+    else:
+        ring_color = '#F0C96A'
+
+    return {
+        "rank": rank,
+        "name": c_name,
+        "handle": c_handle,
+        "meta": f"{row['niche']} - {format_followers(followers_val)} followers - Instagram",
+        "badge": "\U0001f451 #1 Match" if rank == 1 else None,
+        "ratefluencer": final_score,
+        "growth": growth,
+        "authenticity": authenticity,
+        "brandMatch": brand_match,
+        "modelConfidence": scores['model_confidence'],
+        "projectedImpressions": int(row.get('impressions') or row.get('reach') or followers_val * (float(row.get('engagement_rate', 0)) / 100.0) * 8),
+        "successProb": f"{min(95, max(50, round(50 + final_score * 0.45)))}%",
+        "engRate": f"{float(row['engagement_rate']):.1f}%",
+        "why": "Scores generated live from the Growth and Authenticity models." if fallback else f"Category similarity of {brand_match}% with verified low fraud risk.",
+        "ringColor": ring_color,
+        "ringOffset": int(201 * (1.0 - (final_score / 100.0))),
+        "rankClass": f"rank-{rank}"
+    }
+
+
+def csv_recommendations(category_filters, min_auth_val, tier_min, tier_max, min_er_val, excluded_niches, top_k, campaign_text, campaign_goal):
+    df = engine.creators_df.copy()
+    df = df[df['fake_account'] == 0]
+
+    if category_filters:
+        wanted = {str(cat).lower() for cat in category_filters}
+        category_df = df[df['niche'].str.lower().isin(wanted)]
+        if not category_df.empty:
+            df = category_df
+
+    filtered = df[
+        (df['followers'] >= tier_min) &
+        (df['followers'] <= tier_max) &
+        (df['engagement_rate'] >= min_er_val)
+    ]
+
+    if excluded_niches:
+        filtered = filtered[~filtered['niche'].str.lower().apply(
+            lambda niche: any(excl in niche for excl in excluded_niches)
+        )]
+
+    if filtered.empty:
+        filtered = df
+
+    candidate_pool = filtered.sort_values(['engagement_rate', 'followers'], ascending=False).head(150)
+    scored = []
+    for _, row in candidate_pool.iterrows():
+        row_dict = row.to_dict()
+        scores = generated_scores(row_dict, campaign_text, category_filters, campaign_goal)
+        if scores['authenticity'] < min_auth_val or scores['is_fake']:
+            continue
+        scored.append((scores['ratefluencer'], row_dict, scores))
+
+    if not scored:
+        for _, row in candidate_pool.head(top_k).iterrows():
+            row_dict = row.to_dict()
+            scores = generated_scores(row_dict, campaign_text, category_filters, campaign_goal)
+            scored.append((scores['ratefluencer'], row_dict, scores))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [
+        recommendation_from_row(row, idx + 1, scores, fallback=True)
+        for idx, (_, row, scores) in enumerate(scored[:top_k])
+    ]
 
 
 @app.route("/")
@@ -60,8 +321,7 @@ def influencers():
         sample_creators = engine.creators_df[engine.creators_df['fake_account'] == 0].head(8)
         result_list = []
         for idx, row in enumerate(sample_creators.to_dict('records')):
-            c_name = CREATOR_NAMES[int(row['creator_id']) % len(CREATOR_NAMES)]
-            c_handle = f"@{c_name.lower().replace(' ', '_')}"
+            c_name, c_handle = creator_identity(row)
             result_list.append({
                 "id": int(row['creator_id']),
                 "name": c_name,
@@ -73,7 +333,7 @@ def influencers():
                 "growth": int(row['growth_score']),
                 "score": int(row['growth_score'] * 0.5 + row['authenticity_score'] * 0.5),
                 "tier": "S" if row['followers'] > 100000 else "A",
-                "av": "".join([part[0] for part in c_name.split()]),
+                "av": creator_initials(c_name),
                 "c1": "#E1F5EE" if idx % 2 == 0 else "#E6F1FB",
                 "c2": "#085041" if idx % 2 == 0 else "#0C447C"
             })
@@ -85,13 +345,14 @@ def influencers():
 
 @app.route("/api/search")
 def search_creators():
-    """Search and filter all 50k creators with pagination"""
+    """Search and filter creators with pagination"""
     try:
         # Get query parameters
         query = request.args.get('q', '').lower()  # Name or handle search
         niche = request.args.get('niche', '')  # Filter by niche/category
         min_followers = int(request.args.get('min_followers', 0))
-        max_followers = int(request.args.get('max_followers', float('inf')))
+        max_followers_raw = request.args.get('max_followers')
+        max_followers = int(max_followers_raw) if max_followers_raw else float('inf')
         min_auth = int(request.args.get('min_auth', 0))
         min_er = float(request.args.get('min_er', 0.0))
         sort_by = request.args.get('sort_by', 'followers')  # followers, authenticity, growth, engagement_rate
@@ -103,8 +364,9 @@ def search_creators():
 
         # Apply filters
         if query:
-            # Search by niche
-            df = df[df['niche'].str.lower().str.contains(query, na=False)]
+            name_match = df['creator_name'].str.lower().str.contains(query, na=False)
+            niche_match = df['niche'].str.lower().str.contains(query, na=False)
+            df = df[name_match | niche_match]
         
         if niche:
             df = df[df['niche'].str.lower() == niche.lower()]
@@ -134,16 +396,10 @@ def search_creators():
         result_list = []
         for idx, (_, row) in enumerate(paginated_df.iterrows()):
             creator_id = int(row['creator_id'])
-            c_name = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
-            c_handle = f"@{c_name.lower().replace(' ', '_')}"
+            c_name, c_handle = creator_identity(row)
             
             followers_val = int(row['followers'])
-            if followers_val >= 1_000_000:
-                followers_str = f"{followers_val / 1_000_000:.1f}M"
-            elif followers_val >= 1_000:
-                followers_str = f"{followers_val / 1_000:.0f}K"
-            else:
-                followers_str = str(followers_val)
+            followers_str = format_followers(followers_val)
 
             result_list.append({
                 "id": creator_id,
@@ -158,7 +414,7 @@ def search_creators():
                 "growth": int(row['growth_score']),
                 "score": int(row['growth_score'] * 0.5 + row['authenticity_score'] * 0.5),
                 "fake": int(row['fake_account']),
-                "av": "".join([part[0] for part in c_name.split()]),
+                "av": creator_initials(c_name),
             })
 
         return jsonify({
@@ -203,14 +459,15 @@ def match_creators():
             except ValueError:
                 pass
 
-        tier_ranges = {
+        tier_min, tier_max = tier_range(tier_filter_str)
+        legacy_tier_ranges = {
             "All tiers":        (0, float('inf')),
             "Nano (1K–10K)":    (1_000, 10_000),
             "Micro (10K–100K)": (10_000, 100_000),
             "Macro (100K–1M)":  (100_000, 1_000_000),
             "Mega (1M+)":       (1_000_000, float('inf')),
         }
-        tier_min, tier_max = tier_ranges.get(tier_filter_str, (0, float('inf')))
+        # Tier ranges are parsed by tier_range() above to tolerate unicode dash variants.
 
         excluded_niches = [b.strip().lower() for b in excluded_brands_str.split(",") if b.strip()] if excluded_brands_str else []
 
@@ -219,17 +476,22 @@ def match_creators():
 
         logger.info(f"Match request: '{campaign_text[:40]}...' | Goal: {campaign_goal} | Categories: {category_filters}")
 
-        match_results = engine.brand_matcher.match(
-            brand_campaign=campaign_text,
-            top_k=top_k * 3,
-            category_filters=category_filters if category_filters else None,  # Fix #2
-            min_confidence=0.05
-        )
+        try:
+            match_results = engine.brand_matcher.match(
+                brand_campaign=campaign_text,
+                top_k=top_k * 3,
+                category_filters=category_filters if category_filters else None,
+                min_confidence=0.05
+            )
+            top_matches = match_results['top_matches']
+        except Exception as e:
+            logger.warning(f"Semantic matcher failed, using CSV fallback: {e}")
+            top_matches = []
 
         formatted_recos = []
         all_score_results = []  # Fix #1: collect all scores before filtering
 
-        for match in match_results['top_matches']:
+        for match in top_matches:
             creator_id = int(match['creator_id'])
 
             score_res = engine.score_creator(
@@ -274,8 +536,8 @@ def match_creators():
             else:
                 followers_str = str(followers_val)
 
-            c_name = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
-            c_handle = f"@{c_name.lower().replace(' ', '_')}"
+            creator_row = engine.creators_df[engine.creators_df['creator_id'] == creator_id].iloc[0].to_dict()
+            c_name, c_handle = creator_identity(creator_row)
 
             if final_score >= 80:
                 ring_color = '#C8F068'
@@ -299,6 +561,8 @@ def match_creators():
                 "growth": virality,
                 "authenticity": authenticity,
                 "brandMatch": brand_match,
+                "modelConfidence": score_res.get('model_confidence', int(score_res['success_probability'] * 100.0)),
+                "projectedImpressions": int(followers_val * max(er_raw / 100.0, 0.01) * 8),
                 "successProb": f"{score_res['success_probability'] * 100.0:.0f}%",
                 "engRate": er,
                 "why": why_text,
@@ -310,13 +574,27 @@ def match_creators():
             if len(formatted_recos) >= top_k:
                 break
 
+        if not formatted_recos:
+            logger.info("No semantic recommendations survived filters; using live CSV fallback.")
+            formatted_recos = csv_recommendations(
+                category_filters=category_filters,
+                min_auth_val=min_auth_val,
+                tier_min=tier_min,
+                tier_max=tier_max,
+                min_er_val=min_er_val,
+                excluded_niches=excluded_niches,
+                top_k=top_k,
+                campaign_text=campaign_text,
+                campaign_goal=campaign_goal
+            )
+
         insights = []
         if formatted_recos:
             first = formatted_recos[0]
             insights.append({
                 "icon": "\U0001f3af",
                 "title": "Optimal Allocation",
-                "text": f"Allocate the majority of your budget to {first['name']} ({first['meta'].split(' · ')[1]}) to maximise reach, reserving 10% for highly targeted micro-creators."
+                "text": f"Allocate the majority of your budget to {first['name']} to maximise reach, reserving 10% for highly targeted micro-creators."
             })
 
             # Fix #1: use all_score_results (not just the last loop variable)

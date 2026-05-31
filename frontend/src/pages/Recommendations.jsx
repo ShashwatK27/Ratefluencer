@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { recommendations, aiInsights } from '../data/index.js';
+import { aiInsights } from '../data/index.js';
 
 function ScoreRing({ score, color, offset }) {
   return (
@@ -102,6 +102,11 @@ function parseFollowers(meta) {
   return parseFloat(m[1]) * (m[2] === 'M' ? 1_000_000 : 1_000);
 }
 
+function parsePercent(value, fallback = 0) {
+  const n = parseFloat(String(value || '').replace('%', ''));
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate }) {
   const { cats = 'Wellness + Skincare', budget = '₹10L', budgetRaw = null, ageGroup = '25–34' } = campaignMeta || {};
 
@@ -114,22 +119,32 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
     );
   };
 
-  const activeRecos   = recos    && recos.length    > 0 ? recos    : recommendations;
+  const activeRecos   = recos    && recos.length    > 0 ? recos    : [];
   const activeInsights = insights && insights.length > 0 ? insights : aiInsights;
 
   // Fix #7: compute dynamic meta strip values
   const totalFollowers = activeRecos.reduce((sum, r) => sum + parseFollowers(r.meta), 0);
-  const projectedImpressions = Math.round(totalFollowers * 0.12);
+  const projectedImpressions = activeRecos.reduce((sum, r) => {
+    if (Number.isFinite(Number(r.projectedImpressions))) {
+      return sum + Number(r.projectedImpressions);
+    }
+    const fallbackRate = Math.max(parsePercent(r.engRate, 3) / 100, 0.01);
+    return sum + Math.round(parseFollowers(r.meta) * fallbackRate * 8);
+  }, 0);
   const impStr = projectedImpressions >= 1_000_000
     ? `~${(projectedImpressions / 1_000_000).toFixed(1)}M`
     : `~${(projectedImpressions / 1_000).toFixed(0)}K`;
 
   const avgConf = activeRecos.length > 0
-    ? Math.round(activeRecos.reduce((sum, r) => sum + (parseInt(r.successProb) || 80), 0) / activeRecos.length)
+    ? Math.round(activeRecos.reduce((sum, r) => sum + (Number(r.modelConfidence) || parsePercent(r.successProb, 80)), 0) / activeRecos.length)
     : 94;
 
+  const avgScore = activeRecos.length > 0
+    ? activeRecos.reduce((sum, r) => sum + (Number(r.ratefluencer) || 0), 0) / activeRecos.length
+    : 0;
+
   const reachCostStr = budgetRaw
-    ? '₹' + Math.round(Number(budgetRaw) * 0.7).toLocaleString('en-IN')
+    ? '₹' + Math.round(Number(budgetRaw) * (0.45 + (avgScore / 100) * 0.35)).toLocaleString('en-IN')
     : budget;
 
   return (
@@ -160,7 +175,7 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
           marginBottom: '1.5rem',
         }}>
           {[
-            [`${activeRecos.length} of 50,000`, 'Creators evaluated'],
+            [`${activeRecos.length} of 33,935`, 'Creators evaluated'],
             [`${avgConf}%`,                     'Model confidence'],
             [reachCostStr,                       'Est. total reach cost'],
             [impStr,                             'Projected impressions'],
@@ -176,14 +191,24 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
 
         {/* Recommendation cards */}
         <div className="fade-up delay-2" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '2rem' }}>
-          {activeRecos.map(rec => (
-            <RecoCard
-              key={rec.rank}
-              rec={rec}
-              shortlisted={shortlist.includes(rec.name)}
-              onShortlist={handleShortlist}
-            />
-          ))}
+          {activeRecos.length > 0 ? (
+            activeRecos.map(rec => (
+              <RecoCard
+                key={rec.rank}
+                rec={rec}
+                shortlisted={shortlist.includes(rec.name)}
+                onShortlist={handleShortlist}
+              />
+            ))
+          ) : (
+            <div style={{
+              background: 'var(--bg2)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', padding: '1.5rem',
+              color: 'var(--text2)', fontSize: '14px',
+            }}>
+              No live recommendations loaded yet. Create a campaign with the backend running to rank creators from the 33,935-row influencer dataset.
+            </div>
+          )}
         </div>
 
         {/* Fix #8: shortlist panel */}
