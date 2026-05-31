@@ -1,6 +1,6 @@
 import React from 'react';
 
-const CATEGORIES = ['All', 'Tech', 'Fashion', 'Fitness', 'Food', 'Beauty', 'Travel', 'Gaming'];
+const CATEGORIES = ['All', 'Tech', 'Fashion', 'Fitness', 'Food', 'Beauty', 'Travel', 'Gaming', 'Wellness', 'Comedy', 'Music'];
 
 export default function SearchBar({ searchQuery, onSearch, activeCategory, onCategoryChange }) {
   return (

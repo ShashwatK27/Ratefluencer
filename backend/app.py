@@ -61,10 +61,13 @@ CREATOR_NAMES = [
 
 
 NICHE_ALIASES = {
-    'tech': 'technology', 'fitness': 'fitness', 'food': 'food',
+    'tech': 'tech', 'fitness': 'fitness', 'food': 'food',
     'fashion': 'fashion', 'beauty': 'beauty', 'travel': 'travel',
     'gaming': 'gaming', 'finance': 'finance', 'education': 'education',
     'entertainment': 'entertainment', 'wellness': 'wellness', 'pets': 'pets',
+    'art': 'art', 'comedy': 'comedy', 'music': 'music', 'sports': 'sports',
+    'cooking': 'cooking', 'diy': 'diy', 'lifestyle': 'lifestyle',
+    'photography': 'photography', 'business': 'business',
 }
 
 

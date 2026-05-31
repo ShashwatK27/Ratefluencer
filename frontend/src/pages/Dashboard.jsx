@@ -24,23 +24,44 @@ export default function Dashboard({ currentPage, onNavigate }) {
         const params = new URLSearchParams({
           q: searchQuery,
           niche: activeCategory === 'All' ? '' : activeCategory,
-          page: page,
+          page,
           limit: 20,
-          sort_by: 'followers'
+          sort_by: 'followers',
         });
-        
-        const response = await fetch(`${config.api.endpoints.search}?${params}`);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        const response = await fetch(`${config.api.endpoints.search}?${params}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
         if (response.ok) {
           const data = await response.json();
           if (data.results && data.results.length > 0) {
             setDbInfluencers(data.results);
             setTotalPages(data.pages);
             setTotalCount(data.total);
+          } else {
+            // Empty results — keep existing data, no error
+            setTotalCount(0);
           }
         }
       } catch (err) {
-        console.warn("Failed to fetch creators from search API:", err);
-        setError("Failed to load creators");
+        if (err.name === 'AbortError') {
+          console.warn("Search timed out — using fallback data");
+        } else {
+          console.warn("Search API unavailable — using fallback data:", err.message);
+        }
+        // Fall back to static data filtered by category
+        const cat = activeCategory === 'All' ? null : activeCategory.toLowerCase();
+        const fallback = cat
+          ? influencers.filter(i => i.cat.toLowerCase().includes(cat))
+          : influencers;
+        setDbInfluencers(fallback);
+        setTotalPages(1);
+        setTotalCount(fallback.length);
       } finally {
         setLoading(false);
       }
