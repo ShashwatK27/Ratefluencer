@@ -21,6 +21,7 @@ export const config = {
       platformInsights: `${API_URL}/api/platform-insights`,
       realCreators: `${API_URL}/api/real-creators`,
       scoreCaption: `${API_URL}/api/score-caption`,
+      voiceover: `${API_URL}/api/voiceover`,
       creatorMatch: `${API_URL}/api/creator-match`,
       generateLinkedin: `${API_URL}/api/generate-linkedin`,
       trendRanking: `${API_URL}/api/trend-ranking`,

@@ -11,6 +11,8 @@ from authenticity_detector import AuthenticityDetector
 from viral_predictor import ViralPredictor
 from groq import Groq
 from dotenv import load_dotenv
+import requests as http_requests
+import base64
 
 load_dotenv()
 
@@ -1475,6 +1477,59 @@ Return ONLY valid JSON:
 
     except Exception as e:
         logger.error(f"Trend ranking failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/voiceover", methods=["POST"])
+def voiceover():
+    """Generate voiceover audio using ElevenLabs API."""
+    try:
+        data   = request.get_json() or {}
+        text   = data.get("text", "").strip()
+        voice  = data.get("voice_id", "EXAVITQu4vr4xnSDxMaL")  # Bella (clear, warm)
+
+        if not text:
+            return jsonify({"error": "text is required"}), 400
+
+        api_key = os.environ.get("ELEVENLABS_API_KEY", "")
+        if not api_key:
+            return jsonify({"error": "ELEVENLABS_API_KEY not set in .env"}), 503
+
+        # Trim to 800 chars to stay within free tier limits
+        text = text[:800]
+
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        payload = {
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+                "style": 0.3,
+                "use_speaker_boost": True,
+            },
+        }
+
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=30)
+
+        if resp.status_code != 200:
+            logger.error(f"ElevenLabs error {resp.status_code}: {resp.text[:200]}")
+            return jsonify({"error": f"ElevenLabs API error: {resp.status_code}"}), 502
+
+        audio_b64 = base64.b64encode(resp.content).decode("utf-8")
+        return jsonify({
+            "audio_base64": audio_b64,
+            "content_type": "audio/mpeg",
+            "chars_used": len(text),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Voiceover failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 

@@ -1,66 +1,158 @@
 import React, { useRef, useEffect, useState } from "react";
+import axios from "axios";
+import { config } from "../config.js";
 
 // ── Voiceover ────────────────────────────────────────────────────────────────
-function Voiceover({ script }) {
-  const [playing, setPlaying] = useState(false);
-  const [supported] = useState(() => "speechSynthesis" in window);
-  const uttRef = useRef(null);
+const VOICES = [
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella",   desc: "Warm female" },
+  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam",    desc: "Clear male"  },
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",  desc: "Professional female" },
+  { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi",    desc: "Strong female" },
+];
 
-  const play = () => {
-    if (!supported) return;
+function Voiceover({ script }) {
+  const [playing, setPlaying]     = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [voiceId, setVoiceId]     = useState(VOICES[0].id);
+  const [error, setError]         = useState(null);
+  const [charsUsed, setCharsUsed] = useState(null);
+  const audioRef = useRef(null);
+
+  const playElevenLabs = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const resp = await axios.post(config.api.endpoints.voiceover, {
+        text: script?.slice(0, 800) || "",
+        voice_id: voiceId,
+      });
+
+      const { audio_base64, content_type, chars_used } = resp.data;
+      const binary = atob(audio_base64);
+      const bytes  = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: content_type });
+      const url  = URL.createObjectURL(blob);
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+      }
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended  = () => setPlaying(false);
+      audio.onerror  = () => { setPlaying(false); setError("Playback error"); };
+      await audio.play();
+      setPlaying(true);
+      setCharsUsed(chars_used);
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message;
+      if (msg?.includes("ELEVENLABS_API_KEY not set")) {
+        setError("Add ELEVENLABS_API_KEY to backend/.env and restart the backend.");
+      } else {
+        setError(msg || "ElevenLabs request failed");
+      }
+      // Fallback to browser TTS
+      browserFallback();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const browserFallback = () => {
+    if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(script);
-    utt.rate  = 0.95;
-    utt.pitch = 1.05;
-    utt.lang  = "en-IN";
-    // prefer an English-Indian voice if available
+    const utt = new SpeechSynthesisUtterance(script?.slice(0, 800) || "");
+    utt.rate = 0.95; utt.lang = "en-IN";
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => v.lang === "en-IN") || voices.find(v => v.lang.startsWith("en")) || null;
-    if (preferred) utt.voice = preferred;
-    utt.onend = () => setPlaying(false);
+    const v = voices.find(v => v.lang === "en-IN") || voices.find(v => v.lang.startsWith("en"));
+    if (v) utt.voice = v;
+    utt.onend   = () => setPlaying(false);
     utt.onerror = () => setPlaying(false);
-    uttRef.current = utt;
     window.speechSynthesis.speak(utt);
     setPlaying(true);
   };
 
   const stop = () => {
-    window.speechSynthesis.cancel();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+    window.speechSynthesis?.cancel();
     setPlaying(false);
   };
 
-  useEffect(() => () => window.speechSynthesis.cancel(), []);
-
-  if (!supported) return (
-    <div style={{ fontSize: "12px", color: "var(--text3)" }}>Voiceover not supported in this browser.</div>
-  );
+  useEffect(() => () => {
+    stop();
+    if (audioRef.current) URL.revokeObjectURL(audioRef.current.src);
+  }, []);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-      <button
-        onClick={playing ? stop : play}
-        style={{
-          display: "flex", alignItems: "center", gap: "8px",
-          padding: "9px 18px", borderRadius: "100px", fontSize: "13px",
-          background: playing ? "rgba(240,120,104,0.12)" : "rgba(200,240,104,0.12)",
-          border: `1px solid ${playing ? "rgba(240,120,104,0.3)" : "rgba(200,240,104,0.3)"}`,
-          color: playing ? "var(--coral)" : "var(--accent)",
-          cursor: "pointer", transition: "all .2s",
-        }}
-      >
-        {playing ? "⏹ Stop" : "🔊 Play Voiceover"}
-      </button>
-      {playing && (
-        <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
-          {[0,1,2,3,4].map(i => (
-            <div key={i} style={{
-              width: "3px", borderRadius: "2px", background: "var(--accent)",
-              animation: `waveBar 0.8s ease-in-out ${i * 0.1}s infinite alternate`,
-              height: `${8 + i * 4}px`,
-            }} />
-          ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+      {/* Voice selector */}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        {VOICES.map(v => (
+          <button key={v.id} onClick={() => setVoiceId(v.id)} style={{
+            padding: "5px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+            border: voiceId === v.id ? "1px solid var(--accent)" : "1px solid var(--border)",
+            background: voiceId === v.id ? "rgba(200,240,104,0.1)" : "transparent",
+            color: voiceId === v.id ? "var(--accent)" : "var(--text2)",
+            fontFamily: "var(--font-body)",
+          }}>
+            {v.name} <span style={{ color: "var(--text3)", fontSize: "10px" }}>· {v.desc}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <button
+          onClick={playing ? stop : playElevenLabs}
+          disabled={loading}
+          style={{
+            display: "flex", alignItems: "center", gap: "8px",
+            padding: "10px 20px", borderRadius: "100px", fontSize: "13px",
+            background: playing ? "rgba(240,120,104,0.12)" : "rgba(200,240,104,0.12)",
+            border: `1px solid ${playing ? "rgba(240,120,104,0.3)" : "rgba(200,240,104,0.3)"}`,
+            color: playing ? "var(--coral)" : "var(--accent)",
+            cursor: loading ? "wait" : "pointer", transition: "all .2s",
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          {loading ? "⏳ Generating..." : playing ? "⏹ Stop" : "🎙️ Play with ElevenLabs"}
+        </button>
+
+        {playing && (
+          <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
+            {[0,1,2,3,4].map(i => (
+              <div key={i} style={{
+                width: "3px", borderRadius: "2px", background: "var(--accent)",
+                animation: `waveBar 0.8s ease-in-out ${i * 0.1}s infinite alternate`,
+                height: `${8 + i * 4}px`,
+              }} />
+            ))}
+          </div>
+        )}
+
+        {charsUsed && !playing && (
+          <span style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
+            {charsUsed} chars used
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ fontSize: "12px", color: "var(--coral)", padding: "8px 12px", background: "rgba(240,120,104,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(240,120,104,0.2)" }}>
+          ⚠ {error}
+          {error.includes("ELEVENLABS") && (
+            <div style={{ marginTop: "4px", color: "var(--text3)" }}>
+              Using browser speech as fallback.
+            </div>
+          )}
         </div>
       )}
+
+      <div style={{ fontSize: "11px", color: "var(--text3)", lineHeight: 1.6 }}>
+        Powered by ElevenLabs · <strong style={{ color: "var(--text2)" }}>eleven_multilingual_v2</strong> model · Free tier: 10K chars/month
+      </div>
       <style>{`@keyframes waveBar { from{transform:scaleY(0.4)} to{transform:scaleY(1)} }`}</style>
     </div>
   );
