@@ -239,8 +239,7 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
               <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('shortlist')}>
                 📋 View Shortlist {shortlisted.size > 0 && `(${shortlisted.size})`}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>⬇ Export PDF</button>
-              {hasLastForm && (
+{hasLastForm && (
                 <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('campaign')}>
                   ✏️ Edit Campaign
                 </button>

@@ -83,7 +83,7 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
   const [form, setForm] = useState(initialForm || {
     name: '', brand: '', goal: 'Brand Awareness',
     budget: 1000000,
-    ageGroup: '25–34', audience: '', country: 'India', gender: 'All',
+    ageGroup: '25–34', audience: '', country: 'India',
     selectedCategories: ['Wellness'],
     minAuth: '75+', tier: 'Macro (100K–1M)', minEr: '3%+', excludedBrands: '',
   });
@@ -215,18 +215,11 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
           <div className="fade-up" style={cardStyle}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>👥 Target Audience</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <FormGroup label="Primary Age Group">
-                  <select value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)}>
-                    {['13–17','18–24','25–34','35–44','45+'].map(a => <option key={a}>{a}</option>)}
-                  </select>
-                </FormGroup>
-                <FormGroup label="Gender">
-                  <select value={form.gender} onChange={e => set('gender', e.target.value)}>
-                    {['All','Female','Male','Non-binary'].map(g => <option key={g}>{g}</option>)}
-                  </select>
-                </FormGroup>
-              </div>
+              <FormGroup label="Primary Age Group">
+                <select value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)}>
+                  {['13–17','18–24','25–34','35–44','45+'].map(a => <option key={a}>{a}</option>)}
+                </select>
+              </FormGroup>
               <FormGroup label={<>Audience Description <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(most impactful for AI matching)</span></>}>
                 <textarea value={form.audience} onChange={e => set('audience', e.target.value)}
                   placeholder="e.g. Urban millennials interested in skincare, wellness, and sustainable living. Tier-1 and Tier-2 Indian cities."
