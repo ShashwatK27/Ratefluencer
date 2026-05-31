@@ -177,7 +177,7 @@ export default function ViralLab({ onNavigate }) {
               key={p.id}
               onClick={() => { setPlatform(p.id); setResult(null); setError(null); setTopic(""); }}
               className={`btn btn-sm ${platform === p.id ? "btn-primary" : "btn-ghost"}`}
-              style={{ fontSize: "13px" }}
+              style={{ fontSize: "13px", background: platform === p.id && p.id === "linkedin" ? "var(--blue)" : undefined, color: platform === p.id && p.id === "linkedin" ? "#0B0D0F" : undefined }}
             >
               {p.icon} {p.label}
             </button>
@@ -185,7 +185,7 @@ export default function ViralLab({ onNavigate }) {
         </div>
 
         {/* Input card */}
-        <div style={{ background: "var(--bg2)", border: `1px solid ${platform === "linkedin" ? "rgba(104,184,240,0.2)" : "var(--border)"}`, borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem" }}>
+        <div style={{ background: "var(--bg2)", border: `1px solid ${platform === "linkedin" ? "rgba(104,184,240,0.3)" : "var(--border)"}`, borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem", boxShadow: platform === "linkedin" ? "0 0 0 1px rgba(104,184,240,0.08)" : "none" }}>
           <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text2)", letterSpacing: ".05em", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "1.5rem" }}>
             {platform === "linkedin" ? "💼 LinkedIn Topic" : "🧪 Content Topic"}
           </div>
@@ -247,7 +247,7 @@ export default function ViralLab({ onNavigate }) {
                 { label: "Trend Score",    value: result.trend_score,    color: "var(--gold)", icon: "🔥" },
                 { label: "Best Post Time", value: result.best_post_time || (platform === "linkedin" ? "Tue–Thu 9:00 AM" : "18:00 Wed"), color: "var(--coral)", icon: "⏰" },
               ].map(item => item.value != null && (
-                <div key={item.label} style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem 1.25rem" }}>
+                <div key={item.label} style={{ background: platform === "linkedin" ? "rgba(104,184,240,0.04)" : "var(--bg2)", border: platform === "linkedin" ? "1px solid rgba(104,184,240,0.2)" : "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem 1.25rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
                     <span style={{ fontSize: "14px" }}>{item.icon}</span>
                     <span style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>{item.label}</span>
@@ -259,10 +259,14 @@ export default function ViralLab({ onNavigate }) {
 
             {/* Optimization tips */}
             {result.optimization_tips?.length > 0 && (
-              <div className="fade-up" style={{ background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.15)", borderRadius: "var(--radius)", padding: "1rem 1.25rem", marginBottom: "12px" }}>
-                <div style={{ fontSize: "11px", color: "var(--accent)", fontFamily: "var(--font-mono)", letterSpacing: ".05em", textTransform: "uppercase", marginBottom: "8px" }}>📊 Data-Driven Optimisation</div>
+              <div className="fade-up" style={{
+                background: platform === "linkedin" ? "rgba(104,184,240,0.04)" : "rgba(200,240,104,0.04)",
+                border: platform === "linkedin" ? "1px solid rgba(104,184,240,0.2)" : "1px solid rgba(200,240,104,0.15)",
+                borderRadius: "var(--radius)", padding: "1rem 1.25rem", marginBottom: "12px"
+              }}>
+                <div style={{ fontSize: "11px", color: platform === "linkedin" ? "var(--blue)" : "var(--accent)", fontFamily: "var(--font-mono)", letterSpacing: ".05em", textTransform: "uppercase", marginBottom: "8px" }}>📊 Data-Driven Optimisation</div>
                 {result.optimization_tips.map((tip, i) => (
-                  <div key={i} style={{ fontSize: "12px", color: tip.startsWith("✓") ? "var(--accent)" : "var(--text2)", marginBottom: "3px" }}>{tip}</div>
+                  <div key={i} style={{ fontSize: "12px", color: tip.startsWith("✓") ? (platform === "linkedin" ? "var(--blue)" : "var(--accent)") : "var(--text2)", marginBottom: "3px" }}>{tip}</div>
                 ))}
               </div>
             )}
