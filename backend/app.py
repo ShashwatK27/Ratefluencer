@@ -904,25 +904,28 @@ Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentence
         best_days  = insights.get('best_days', ['Wednesday', 'Friday'])
         opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
 
-        # Step 3 — Generate content for that influencer
-        content_prompt = f"""You are a viral content creator for Instagram.
+        # Step 3 — Generate Instagram + LinkedIn content simultaneously
+        content_prompt = f"""You are a viral content creator for Instagram and LinkedIn.
 Campaign goal: {goal}
 Trending topic: {trend}
 Assigned influencer: {influencer_name} (niche: {influencer_niche})
-Data insight: Best posting time is {best_hours[0]}:00 on {best_days[0]}, use {opt_hashtags[0]}–{opt_hashtags[1]} hashtags
+Data insight: Best Instagram posting time is {best_hours[0]}:00 on {best_days[0]}, use {opt_hashtags[0]}–{opt_hashtags[1]} hashtags
 
-Generate a reel idea and a caption tailored to this influencer and trend.
+Generate content for BOTH platforms tailored to this influencer and trend.
 Return ONLY JSON (no other text):
 {{
-  "reel_idea": "<creative 1-2 sentence reel concept>",
-  "caption": "<engaging Instagram caption under 100 words with a clear CTA>"
+  "reel_idea": "<creative 1-2 sentence Instagram reel concept>",
+  "caption": "<engaging Instagram caption under 100 words with a clear CTA>",
+  "linkedin_hook": "<one punchy LinkedIn opening line — max 15 words>",
+  "linkedin_post": "<professional LinkedIn post 100-150 words with insights and CTA>",
+  "linkedin_hashtags": "<5-7 professional LinkedIn hashtags>"
 }}"""
 
         content_resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": content_prompt}],
             temperature=0.7,
-            max_tokens=400,
+            max_tokens=700,
         )
         content_data = _parse_groq_json(content_resp.choices[0].message.content.strip())
 
@@ -932,6 +935,9 @@ Return ONLY JSON (no other text):
             "influencer":       influencer_name,
             "reel_idea":        content_data.get("reel_idea", "Create an authentic day-in-the-life reel showcasing real product use."),
             "caption":          content_data.get("caption", "Real results, real people. Discover the difference. #sponsored"),
+            "linkedin_hook":    content_data.get("linkedin_hook", ""),
+            "linkedin_post":    content_data.get("linkedin_post", ""),
+            "linkedin_hashtags": content_data.get("linkedin_hashtags", ""),
             "virality_score":   virality_score,
             "campaign_success": campaign_success,
             "best_post_time":   f"{best_hours[0]}:00 on {best_days[0]}",
@@ -1053,6 +1059,109 @@ def real_creators():
         return jsonify({'results': results, 'total': len(results), 'real': True}), 200
     except Exception as e:
         logger.error(f"Real creators failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/generate-linkedin", methods=["POST"])
+def generate_linkedin():
+    """Generate LinkedIn post, professional caption, hashtags and engagement hook."""
+    try:
+        data  = request.get_json() or {}
+        topic = data.get("topic", "").strip()
+        tone  = data.get("tone", "Professional")
+        category = data.get("content_category", "Business")
+
+        if not topic:
+            return jsonify({"error": "topic is required"}), 400
+
+        insights = viral_predictor.get_content_insights(category)
+        opt_hashtags = insights.get('optimal_hashtag_range', (5, 8))
+
+        prompt = f"""You are a LinkedIn content strategist who creates viral professional content.
+Write a LinkedIn post for this topic: "{topic}"
+Tone: {tone}
+Industry/Category: {category}
+
+Return ONLY a valid JSON object:
+{{
+  "hook": "<one punchy opening line that stops the scroll — max 15 words>",
+  "post": "<full LinkedIn post: hook + 3-4 insight paragraphs + CTA. Use line breaks. 150-250 words>",
+  "caption": "<professional summary caption under 50 words>",
+  "hashtags": "<{opt_hashtags[0]} to {opt_hashtags[1]} professional LinkedIn hashtags>",
+  "engagement_hook": "<a question at the end to drive comments>",
+  "virality_score": <integer 0-100>
+}}"""
+
+        resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        result = _parse_groq_json(resp.choices[0].message.content.strip())
+        if not result:
+            return jsonify({"error": "Failed to parse AI response"}), 500
+
+        result['platform'] = 'LinkedIn'
+        result['best_post_time'] = "Tuesday–Thursday, 8:00–10:00 AM"
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"LinkedIn generation failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/trend-ranking", methods=["POST"])
+def trend_ranking():
+    """Discover and rank trending topics on 5 ML-scored dimensions."""
+    try:
+        data     = request.get_json() or {}
+        category = data.get("category", "General")
+        goal     = data.get("goal", "")
+
+        prompt = f"""You are a social media trend analyst with access to real-time signals.
+Identify 5 trending topics for the {category} category{' related to: ' + goal if goal else ''}.
+
+Score each trend on 5 dimensions (0-100):
+- growth_velocity: How fast this trend is growing right now
+- engagement_potential: Expected likes/comments/shares
+- novelty: How fresh/new this topic is
+- audience_relevance: Relevance to {category} audience
+- search_interest: Current search volume interest
+
+Return ONLY valid JSON:
+{{
+  "trends": [
+    {{
+      "topic": "<trend name>",
+      "description": "<1 sentence description>",
+      "growth_velocity": <0-100>,
+      "engagement_potential": <0-100>,
+      "novelty": <0-100>,
+      "audience_relevance": <0-100>,
+      "search_interest": <0-100>,
+      "trend_score": <weighted average 0-100>,
+      "why": "<why this is trending now in 1 sentence>"
+    }}
+  ]
+}}"""
+
+        resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=1200,
+        )
+        result = _parse_groq_json(resp.choices[0].message.content.strip())
+        if not result:
+            return jsonify({"error": "Failed to parse trends"}), 500
+
+        # Sort by trend_score descending
+        trends = sorted(result.get("trends", []), key=lambda t: t.get("trend_score", 0), reverse=True)
+        return jsonify({"trends": trends, "category": category}), 200
+
+    except Exception as e:
+        logger.error(f"Trend ranking failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 

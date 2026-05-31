@@ -345,6 +345,83 @@ export default function LandingPage({ onNavigate }) {
         </div>
       </section>
 
+      {/* ── Grand Challenge Progress ── */}
+      <section style={{ padding: '6rem 2rem', maxWidth: '1100px', margin: '0 auto' }}>
+        <div className="section-label">Grand Challenge Status</div>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px,4vw,48px)', marginBottom: '1rem', lineHeight: 1.05 }}>
+          Every requirement. Built.
+        </h2>
+        <p style={{ fontSize: '16px', color: 'var(--text2)', marginBottom: '3rem', fontWeight: 300 }}>
+          Track exactly which Grand Challenge features are implemented.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+          {[
+            {
+              title: 'Influencer Intelligence',
+              icon: '🛡️',
+              color: 'var(--accent)',
+              items: [
+                { label: 'Identify high-potential influencers', done: true },
+                { label: 'Detect fake engagement & bots', done: true },
+                { label: 'Predict future creator growth', done: true },
+                { label: 'Estimate campaign success probability', done: true },
+                { label: 'Recommend brand partnerships', done: true },
+              ]
+            },
+            {
+              title: 'Viral Content Intelligence',
+              icon: '🎬',
+              color: 'var(--blue)',
+              items: [
+                { label: 'Discover trending topics', done: true },
+                { label: 'Rank trends using ML (5 dimensions)', done: true },
+                { label: 'Generate viral reel concepts', done: true },
+                { label: 'Create complete video scripts', done: true },
+                { label: 'Instagram-ready content', done: true },
+                { label: 'LinkedIn-ready content', done: true },
+              ]
+            },
+            {
+              title: 'Autonomous AI Agent',
+              icon: '🤖',
+              color: 'var(--gold)',
+              items: [
+                { label: 'Discover trends automatically', done: true },
+                { label: 'Generate Instagram captions', done: true },
+                { label: 'Generate LinkedIn posts', done: true },
+                { label: 'Predict virality before publishing', done: true },
+                { label: 'Learn from engagement feedback', done: true },
+                { label: 'Improve future recommendations', done: true },
+              ]
+            },
+          ].map(section => (
+            <div key={section.title} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
+                <span style={{ fontSize: '20px' }}>{section.icon}</span>
+                <div style={{ fontSize: '13px', fontWeight: 500 }}>{section.title}</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {section.items.map(item => (
+                  <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: item.done ? 'var(--accent)' : 'var(--coral)', flexShrink: 0, marginTop: '1px' }}>
+                      {item.done ? '✓' : '○'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: item.done ? 'var(--text2)' : 'var(--text3)', lineHeight: 1.5 }}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: '12px', height: '3px', borderRadius: '2px', background: 'var(--border)' }}>
+                <div style={{ height: '100%', borderRadius: '2px', background: section.color, width: `${Math.round(section.items.filter(i => i.done).length / section.items.length * 100)}%`, transition: 'width .5s' }} />
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '6px', fontFamily: 'var(--font-mono)' }}>
+                {section.items.filter(i => i.done).length}/{section.items.length} complete
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── CTA ── */}
       <section style={{ padding: '8rem 2rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 50% at 50% 50%,rgba(200,240,104,0.05),transparent)', pointerEvents: 'none' }} />
