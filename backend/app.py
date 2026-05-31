@@ -853,36 +853,39 @@ Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentence
         trend = trend_data.get("trend", "Sustainable lifestyle content is surging across Gen-Z audiences.")
         detected_category = trend_data.get("category", "Lifestyle")
 
-        # Step 2 — Find best influencer via ML engine (with feedback loop)
-        match_results = engine.brand_matcher.match(
-            brand_campaign=goal,
-            top_k=15,
-            min_confidence=0.05
-        )
+        # Step 2 — Find best influencer using CSV data (feedback loop: skip low scores)
+        df = engine.creators_df.copy()
+        cat_lower = detected_category.lower()
+        cat_df = df[
+            (df['fake_account'] == 0) &
+            (df['niche'].str.lower().str.contains(cat_lower, na=False))
+        ].sort_values('engagement_rate', ascending=False)
 
-        best_creator = None
+        if cat_df.empty:
+            cat_df = df[df['fake_account'] == 0].sort_values('engagement_rate', ascending=False)
+
+        best_row = None
         iterations = 0
-        for match in match_results.get("top_matches", []):
-            creator_id = int(match["creator_id"])
-            score_res = engine.score_creator(creator_id=creator_id, campaign_text=goal)
+        for _, row in cat_df.head(20).iterrows():
             iterations += 1
-
-            # Feedback loop: skip low-scoring or high-risk creators
-            if score_res["risk_metrics"]["risk_level"] == "High":
-                logger.info(f"Agent feedback: skipping creator {creator_id} (High risk)")
+            scores = generated_scores(row.to_dict(), goal, [detected_category], 'balanced')
+            if scores['is_fake']:
                 continue
-            if score_res["success_probability"] < 0.55 and iterations < 10:
-                logger.info(f"Agent feedback: skipping creator {creator_id} (low success prob {score_res['success_probability']:.0%})")
+            if (scores['ratefluencer'] / 100) < 0.55 and iterations < 15:
                 continue
-
-            score_res["display_name"] = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
-            best_creator = score_res
+            best_row = row.to_dict()
+            best_row['_scores'] = scores
             break
 
-        influencer_name   = best_creator["display_name"]        if best_creator else "Ananya Sharma"
-        virality_score    = int(best_creator["scores"]["growth_score"])  if best_creator else 72
-        campaign_success  = int(best_creator["success_probability"]*100) if best_creator else 75
-        influencer_niche  = best_creator.get("niche", detected_category) if best_creator else detected_category
+        if best_row is None and not cat_df.empty:
+            best_row = cat_df.iloc[0].to_dict()
+            best_row['_scores'] = generated_scores(best_row, goal, [detected_category], 'balanced')
+
+        influencer_name, _ = creator_identity(best_row) if best_row else ("Ananya Sharma", "@ananya_sharma")
+        virality_score   = int(best_row['_scores']['growth']) if best_row else 72
+        rf_score         = float(best_row['_scores']['ratefluencer']) if best_row else 70
+        campaign_success = int(50 + (rf_score / 100) * 45)
+        influencer_niche = str(best_row.get('niche', detected_category)) if best_row else detected_category
 
         # Get real data insights for the detected category
         insights = viral_predictor.get_content_insights(detected_category)
