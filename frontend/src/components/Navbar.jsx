@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 const LINKS = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'campaign',  label: 'Campaign'  },
   { id: 'viralLab',  label: 'Viral Lab' },
   { id: 'aiAgent',   label: 'AI Agent'  },
 ];
