@@ -751,7 +751,18 @@ def _parse_groq_json(raw: str) -> dict:
     start = raw.find('{')
     end = raw.rfind('}') + 1
     if start >= 0 and end > start:
-        return json.loads(raw[start:end])
+        snippet = raw[start:end]
+        try:
+            return json.loads(snippet)
+        except json.JSONDecodeError:
+            # Remove control characters and retry
+            import re
+            cleaned = re.sub(r'[\x00-\x1f\x7f](?<!["\n\t\r])', ' ', snippet)
+            cleaned = re.sub(r'\n', '\\n', cleaned)
+            try:
+                return json.loads(cleaned)
+            except Exception:
+                return {}
     return {}
 
 
@@ -1085,15 +1096,14 @@ def generate_linkedin():
             negative = sum(1 for f in feedback_history if f.get("vote") == "down")
             total    = len(feedback_history)
             if negative > positive:
-                improvement_note = f"\nLearning from {total} previous feedbacks ({negative} downvotes): Make this content MORE engaging, creative, and punchy than previous attempts. Avoid being too formal or generic."
+                improvement_note = f"Learning from {total} previous feedbacks ({negative} downvotes): Be MORE engaging, creative and punchy. Avoid generic language."
                 tone = "Inspirational" if tone == "Professional" else tone
             elif positive > 0:
-                improvement_note = f"\nLearning from {total} previous feedbacks ({positive} upvotes): Continue using this successful {tone} style — users responded well to it."
+                improvement_note = f"Learning from {total} previous feedbacks ({positive} upvotes): Keep the successful {tone} style users responded well to."
 
         prompt = f"""You are a LinkedIn content strategist who creates viral professional content.
 Write a LinkedIn post for this topic: "{topic}"
-Tone: {tone}
-Industry/Category: {category}{improvement_note}
+Tone: {tone}. Industry: {category}. {improvement_note}
 
 Return ONLY a valid JSON object:
 {{
