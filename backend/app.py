@@ -1099,6 +1099,100 @@ def real_creators():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/score-caption", methods=["POST"])
+def score_caption():
+    """Score an existing caption against real Instagram benchmarks + AI feedback."""
+    try:
+        data          = request.get_json() or {}
+        caption       = data.get("caption", "").strip()
+        hashtags      = data.get("hashtags", "").strip()
+        media_type    = data.get("media_type", "reel")
+        category      = data.get("content_category", "Lifestyle")
+        post_hour     = int(data.get("post_hour", 18))
+        day_of_week   = data.get("day_of_week", "Wednesday")
+        follower_count = int(data.get("follower_count", 50000))
+
+        if not caption:
+            return jsonify({"error": "caption is required"}), 400
+
+        # Count hashtags
+        hashtag_list  = [h for h in hashtags.split() if h.startswith('#')]
+        hashtag_count = len(hashtag_list) if hashtag_list else len(hashtags.split())
+
+        # Detect CTA in caption
+        cta_words  = ['click','link','bio','comment','share','follow','save','dm','buy','shop','visit','tag','swipe','watch']
+        has_cta    = int(any(w in caption.lower() for w in cta_words))
+        caption_len = len(caption)
+
+        # Score against real data benchmarks
+        score_result = viral_predictor.predict({
+            'content_category': category,
+            'hashtags_count':   hashtag_count,
+            'caption_length':   caption_len,
+            'has_call_to_action': has_cta,
+            'post_hour':        post_hour,
+            'day_of_week':      day_of_week,
+            'media_type':       media_type,
+            'follower_count':   follower_count,
+        })
+
+        # AI analysis of the actual caption text
+        ai_prompt = f"""You are a social media expert who analyses Instagram captions.
+
+Analyse this caption and provide specific, actionable feedback:
+
+CAPTION:
+{caption}
+
+HASHTAGS:
+{hashtags if hashtags else '(none provided)'}
+
+Category: {category} | Format: {media_type} | Follower count: {follower_count:,}
+
+Return ONLY valid JSON:
+{{
+  "strengths": ["<specific strength 1>", "<specific strength 2>"],
+  "improvements": ["<specific improvement 1>", "<specific improvement 2>", "<specific improvement 3>"],
+  "rewritten_hook": "<rewrite just the first sentence to be more compelling>",
+  "missing_elements": ["<what's missing, e.g. CTA, emoji, question>"],
+  "tone": "<detected tone: e.g. Professional, Casual, Inspirational>",
+  "readability_score": <integer 0-100>
+}}"""
+
+        ai_resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": ai_prompt}],
+            temperature=0.5,
+            max_tokens=700,
+        )
+        ai_data = _parse_groq_json(ai_resp.choices[0].message.content.strip())
+
+        insights = viral_predictor.get_content_insights(category)
+
+        return jsonify({
+            "virality_score":      score_result['viral_score'],
+            "predicted_bucket":    score_result['predicted_bucket'],
+            "optimization_tips":   score_result.get('optimization_tips', []),
+            "best_hours":          score_result.get('best_hours', [18, 12, 20]),
+            "best_days":           score_result.get('best_days', ['Wednesday', 'Friday']),
+            "optimal_hashtag_range": score_result.get('optimal_hashtag_range', '6–15'),
+            "your_hashtag_count":  hashtag_count,
+            "your_caption_length": caption_len,
+            "has_cta":             bool(has_cta),
+            "strengths":           ai_data.get("strengths", []),
+            "improvements":        ai_data.get("improvements", []),
+            "rewritten_hook":      ai_data.get("rewritten_hook", ""),
+            "missing_elements":    ai_data.get("missing_elements", []),
+            "tone":                ai_data.get("tone", ""),
+            "readability_score":   ai_data.get("readability_score", 70),
+            "data_source":         f"Benchmarked against {insights.get('total_posts', 3000):,} real {category} posts",
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Caption scoring failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/generate-linkedin", methods=["POST"])
 def generate_linkedin():
     """Generate LinkedIn post, professional caption, hashtags and engagement hook."""

@@ -84,6 +84,10 @@ function ContentCard({ field, result, platform }) {
   );
 }
 
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const HOURS = Array.from({length:24},(_,i) => ({ label: `${i}:00`, value: i }));
+const MEDIA_TYPES = ["reel","image","carousel","video"];
+
 export default function ViralLab({ onNavigate }) {
   const [platform, setPlatform] = useState("instagram");
   const [topic, setTopic] = useState("");
@@ -92,6 +96,17 @@ export default function ViralLab({ onNavigate }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Score My Caption state
+  const [caption, setCaption] = useState("");
+  const [hashtags, setHashtags] = useState("");
+  const [mediaType, setMediaType] = useState("reel");
+  const [postHour, setPostHour] = useState(18);
+  const [dayOfWeek, setDayOfWeek] = useState("Wednesday");
+  const [scoreCategory, setScoreCategory] = useState("Lifestyle");
+  const [scoreResult, setScoreResult] = useState(null);
+  const [scoreLoading, setScoreLoading] = useState(false);
+  const [scoreError, setScoreError] = useState(null);
 
   const linkedinFeedbackCount = (() => {
     try { return JSON.parse(localStorage.getItem('ratefluencer_feedback') || '[]').filter(f => f.key?.includes('linkedin')).length; }
@@ -127,16 +142,38 @@ export default function ViralLab({ onNavigate }) {
     }
   };
 
-  if (loading) {
+  const scoreCaption = async () => {
+    if (!caption.trim()) return;
+    try {
+      setScoreLoading(true);
+      setScoreError(null);
+      setScoreResult(null);
+      const response = await axios.post(config.api.endpoints.scoreCaption, {
+        caption, hashtags,
+        media_type: mediaType,
+        content_category: scoreCategory,
+        post_hour: postHour,
+        day_of_week: dayOfWeek,
+      });
+      setScoreResult(response.data);
+    } catch (err) {
+      console.error(err);
+      setScoreError("Scoring failed. Please check the backend is running.");
+    } finally {
+      setScoreLoading(false);
+    }
+  };
+
+  if (loading || scoreLoading) {
     return (
       <div style={{ paddingTop: "56px", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "3rem 4rem", textAlign: "center", maxWidth: "400px", width: "100%" }}>
-          <div style={{ fontSize: "40px", marginBottom: "1.5rem" }}>{platform === "linkedin" ? "💼" : "🧪"}</div>
+          <div style={{ fontSize: "40px", marginBottom: "1.5rem" }}>{scoreLoading ? "🔬" : platform === "linkedin" ? "💼" : "🧪"}</div>
           <div style={{ fontFamily: "var(--font-display)", fontSize: "24px", color: "var(--text)", marginBottom: "8px" }}>
-            Generating {platform === "linkedin" ? "LinkedIn" : "Viral"} Content
+            {scoreLoading ? "Scoring Your Caption" : `Generating ${platform === "linkedin" ? "LinkedIn" : "Viral"} Content`}
           </div>
           <div style={{ fontSize: "14px", color: "var(--text2)" }}>
-            Crafting your {tone.toLowerCase()} {platform === "linkedin" ? "professional" : "viral"} content...
+            {scoreLoading ? "Analysing against 30K real Instagram posts..." : `Crafting your ${tone.toLowerCase()} content...`}
           </div>
           <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "center", gap: "6px" }}>
             {[0,1,2].map(i => (
@@ -177,13 +214,14 @@ export default function ViralLab({ onNavigate }) {
           {[
             { id: "instagram", icon: "📸", label: "Instagram Reel" },
             { id: "linkedin",  icon: "💼", label: "LinkedIn Post"  },
+            { id: "score",     icon: "🔬", label: "Score My Caption" },
           ].map(p => (
             <button
               key={p.id}
-              onClick={() => { setPlatform(p.id); setResult(null); setError(null); setTopic(""); }}
+              onClick={() => { setPlatform(p.id); setResult(null); setScoreResult(null); setError(null); setScoreError(null); setTopic(""); }}
               className={`btn btn-sm ${platform === p.id ? "btn-primary" : "btn-ghost"}`}
               style={{ fontSize: "13px",
-                background: platform === p.id ? (p.id === "linkedin" ? "var(--blue)" : IG_COLOR) : undefined,
+                background: platform === p.id ? (p.id === "linkedin" ? "var(--blue)" : p.id === "score" ? "var(--purple)" : IG_COLOR) : undefined,
                 color: platform === p.id ? "#0B0D0F" : undefined,
               }}
             >
@@ -192,8 +230,148 @@ export default function ViralLab({ onNavigate }) {
           ))}
         </div>
 
-        {/* Input card */}
-        <div style={{ background: "var(--bg2)", border: `1px solid ${platform === "linkedin" ? "rgba(104,184,240,0.3)" : IG_BORDER}`, borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem", boxShadow: platform === "linkedin" ? "0 0 0 1px rgba(104,184,240,0.08)" : `0 0 0 1px ${IG_COLOR_DIM}` }}>
+        {/* ── Score My Caption tab ── */}
+        {platform === "score" && (
+          <div>
+            {/* Input */}
+            <div style={{ background: "var(--bg2)", border: "1px solid rgba(176,104,240,0.3)", borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem", boxShadow: "0 0 0 1px rgba(176,104,240,0.06)" }}>
+              <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text2)", letterSpacing: ".05em", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "1.5rem" }}>
+                🔬 Paste Your Caption
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label>Your Caption</label>
+                  <textarea value={caption} onChange={e => setCaption(e.target.value)} placeholder="Paste your Instagram caption here..." style={{ minHeight: "100px" }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label>Your Hashtags <span style={{ color: "var(--text3)", fontWeight: 400 }}>(optional)</span></label>
+                  <input type="text" value={hashtags} onChange={e => setHashtags(e.target.value)} placeholder="#skincare #wellness #glow (space separated)" />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "10px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text2)" }}>Category</label>
+                    <select value={scoreCategory} onChange={e => setScoreCategory(e.target.value)}>
+                      {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text2)" }}>Format</label>
+                    <select value={mediaType} onChange={e => setMediaType(e.target.value)}>
+                      {MEDIA_TYPES.map(m => <option key={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text2)" }}>Post Hour</label>
+                    <select value={postHour} onChange={e => setPostHour(Number(e.target.value))}>
+                      {HOURS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text2)" }}>Day</label>
+                    <select value={dayOfWeek} onChange={e => setDayOfWeek(e.target.value)}>
+                      {DAYS.map(d => <option key={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {scoreError && (
+              <div style={{ background: "rgba(240,100,100,0.08)", border: "1px solid rgba(240,100,100,0.2)", borderRadius: "var(--radius)", padding: "1rem 1.25rem", color: "#F06464", fontSize: "13px", marginBottom: "1rem" }}>
+                {scoreError}
+              </div>
+            )}
+
+            <button
+              onClick={scoreCaption}
+              disabled={!caption.trim()}
+              className="btn btn-primary"
+              style={{ width: "100%", padding: "16px", borderRadius: "100px", fontSize: "16px", fontWeight: 600, marginBottom: "2rem", justifyContent: "center", background: "var(--purple)", opacity: caption.trim() ? 1 : 0.5, cursor: caption.trim() ? "pointer" : "not-allowed" }}
+              onMouseEnter={e => { if (caption.trim()) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 12px 40px rgba(176,104,240,0.3)"; }}}
+              onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
+            >
+              🔬 Score My Caption
+            </button>
+
+            {/* Results */}
+            {scoreResult && (
+              <div className="fade-up">
+                {/* Score strip */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+                  {[
+                    { label: "Virality Score", value: scoreResult.virality_score, suffix: "", color: scoreResult.virality_score >= 70 ? "var(--accent)" : scoreResult.virality_score >= 50 ? "var(--gold)" : "var(--coral)", icon: "🚀" },
+                    { label: "Readability", value: scoreResult.readability_score, suffix: "", color: "var(--blue)", icon: "📖" },
+                    { label: "Hashtags", value: `${scoreResult.your_hashtag_count} / ${scoreResult.optimal_hashtag_range}`, suffix: "", color: "var(--gold)", icon: "🏷️" },
+                    { label: "Has CTA", value: scoreResult.has_cta ? "Yes ✓" : "No ✗", suffix: "", color: scoreResult.has_cta ? "var(--accent)" : "var(--coral)", icon: "📣" },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: "rgba(176,104,240,0.05)", border: "1px solid rgba(176,104,240,0.2)", borderRadius: "var(--radius)", padding: "1rem 1.25rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                        <span>{item.icon}</span>
+                        <span style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>{item.label}</span>
+                      </div>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", color: item.color }}>{item.value}{item.suffix}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tone + data source */}
+                <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+                  {scoreResult.tone && <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "rgba(176,104,240,0.08)", color: "var(--purple)", border: "1px solid rgba(176,104,240,0.2)", fontFamily: "var(--font-mono)" }}>Tone: {scoreResult.tone}</span>}
+                  {scoreResult.predicted_bucket && <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "rgba(200,240,104,0.08)", color: "var(--accent)", border: "1px solid rgba(200,240,104,0.15)", fontFamily: "var(--font-mono)" }}>Predicted: {scoreResult.predicted_bucket.toUpperCase()}</span>}
+                  <span style={{ fontSize: "12px", color: "var(--text3)", display: "flex", alignItems: "center" }}>📊 {scoreResult.data_source}</span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                  {/* Strengths */}
+                  {scoreResult.strengths?.length > 0 && (
+                    <div style={{ background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.15)", borderRadius: "var(--radius)", padding: "1.25rem" }}>
+                      <div style={{ fontSize: "11px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>✓ What Works</div>
+                      {scoreResult.strengths.map((s, i) => (
+                        <div key={i} style={{ fontSize: "13px", color: "var(--text2)", marginBottom: "6px", display: "flex", gap: "8px" }}>
+                          <span style={{ color: "var(--accent)", flexShrink: 0 }}>✓</span>{s}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Improvements */}
+                  {scoreResult.improvements?.length > 0 && (
+                    <div style={{ background: "rgba(240,120,104,0.04)", border: "1px solid rgba(240,120,104,0.15)", borderRadius: "var(--radius)", padding: "1.25rem" }}>
+                      <div style={{ fontSize: "11px", color: "var(--coral)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>↑ Improvements</div>
+                      {scoreResult.improvements.map((s, i) => (
+                        <div key={i} style={{ fontSize: "13px", color: "var(--text2)", marginBottom: "6px", display: "flex", gap: "8px" }}>
+                          <span style={{ color: "var(--coral)", flexShrink: 0 }}>↑</span>{s}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Rewritten hook */}
+                {scoreResult.rewritten_hook && (
+                  <div style={{ background: "rgba(176,104,240,0.05)", border: "1px solid rgba(176,104,240,0.2)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "12px" }}>
+                    <div style={{ fontSize: "11px", color: "var(--purple)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "8px" }}>✨ Rewritten Opening Hook</div>
+                    <div style={{ fontSize: "15px", color: "var(--text)", lineHeight: 1.6, fontStyle: "italic" }}>"{scoreResult.rewritten_hook}"</div>
+                  </div>
+                )}
+
+                {/* Optimization tips from real data */}
+                {scoreResult.optimization_tips?.length > 0 && (
+                  <div style={{ background: "rgba(176,104,240,0.04)", border: "1px solid rgba(176,104,240,0.15)", borderRadius: "var(--radius)", padding: "1rem 1.25rem", marginBottom: "12px" }}>
+                    <div style={{ fontSize: "11px", color: "var(--purple)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "8px" }}>📊 Data-Driven Timing Tips</div>
+                    {scoreResult.optimization_tips.map((tip, i) => (
+                      <div key={i} style={{ fontSize: "12px", color: tip.startsWith("✓") ? "var(--accent)" : "var(--text2)", marginBottom: "3px" }}>{tip}</div>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={scoreCaption} className="btn btn-ghost btn-sm" style={{ fontSize: "12px" }}>↻ Re-score</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input card — only for Instagram / LinkedIn */}
+        {platform !== "score" && <><div style={{ background: "var(--bg2)", border: `1px solid ${platform === "linkedin" ? "rgba(104,184,240,0.3)" : IG_BORDER}`, borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem", boxShadow: platform === "linkedin" ? "0 0 0 1px rgba(104,184,240,0.08)" : `0 0 0 1px ${IG_COLOR_DIM}` }}>
           <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text2)", letterSpacing: ".05em", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "1.5rem" }}>
             {platform === "linkedin" ? "💼 LinkedIn Topic" : "🧪 Content Topic"}
           </div>
@@ -229,11 +407,7 @@ export default function ViralLab({ onNavigate }) {
           </div>
         </div>
 
-        {error && (
-          <div style={{ background: "rgba(240,100,100,0.08)", border: "1px solid rgba(240,100,100,0.2)", borderRadius: "var(--radius)", padding: "1rem 1.25rem", color: "#F06464", fontSize: "13px", marginBottom: "1rem" }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ background: "rgba(240,100,100,0.08)", border: "1px solid rgba(240,100,100,0.2)", borderRadius: "var(--radius)", padding: "1rem 1.25rem", color: "#F06464", fontSize: "13px", marginBottom: "1rem" }}>{error}</div>}
 
         <button
           onClick={generate}
@@ -292,7 +466,7 @@ export default function ViralLab({ onNavigate }) {
 
             <FeedbackBar contentKey={`${platform}_${topic}`} result={result} />
           </div>
-        )}
+        )}</>}
 
       </div>
     </div>

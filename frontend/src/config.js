@@ -20,6 +20,7 @@ export const config = {
       viralPredict: `${API_URL}/api/viral-predict`,
       platformInsights: `${API_URL}/api/platform-insights`,
       realCreators: `${API_URL}/api/real-creators`,
+      scoreCaption: `${API_URL}/api/score-caption`,
       generateLinkedin: `${API_URL}/api/generate-linkedin`,
       trendRanking: `${API_URL}/api/trend-ranking`,
     }
