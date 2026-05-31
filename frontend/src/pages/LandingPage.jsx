@@ -52,8 +52,8 @@ function MiniRing({ score, color, size = 56, animate = true }) {
 // ── Live product preview card ───────────────────────────────────────────────
 function HeroPreview() {
   const creators = [
-    { name: 'Ananya Sharma', meta: 'Beauty · 1.2M · Instagram', score: 94, growth: 88, auth: 96, brand: 91, color: '#C8F068', badge: '👑 #1 Match' },
-    { name: 'Rohan Fitness',  meta: 'Fitness · 480K · Instagram', score: 81, growth: 85, auth: 90, brand: 78, color: '#68B8F0', badge: null },
+    { name: 'Shashwat',       meta: 'Beauty · 1.2M · Instagram', score: 94, growth: 88, auth: 96, brand: 91, color: '#C8F068', badge: '👑 #1 Match' },
+    { name: 'Vaidehi Turkar', meta: 'Fitness · 480K · Instagram', score: 81, growth: 85, auth: 90, brand: 78, color: '#68B8F0', badge: null },
     { name: 'Priya Travels',  meta: 'Travel · 720K · Instagram',  score: 73, growth: 70, auth: 83, brand: 86, color: '#F0C96A', badge: null },
   ];
 
