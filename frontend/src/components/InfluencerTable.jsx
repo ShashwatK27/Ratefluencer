@@ -39,16 +39,30 @@ function TableRow({ influencer }) {
       {/* Influencer info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{
-          width: '32px', height: '32px', borderRadius: '50%',
+          width: '36px', height: '36px', borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '12px', fontWeight: 500, flexShrink: 0,
-          background: c1, color: c2,
+          fontSize: '12px', fontWeight: 600, flexShrink: 0,
+          background: c1, color: c2, border: `1px solid ${c2}30`,
         }}>
           {av}
         </div>
         <div>
-          <div style={{ fontSize: '14px', fontWeight: 500 }}>{name}</div>
-          <div style={{ fontSize: '12px', color: 'var(--text3)' }}>{handle}</div>
+          <div style={{ fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {name}
+            {influencer.real && (
+              <span style={{ fontSize: '9px', background: 'rgba(200,240,104,0.08)', color: 'var(--accent)', border: '1px solid rgba(200,240,104,0.15)', padding: '1px 5px', borderRadius: '3px', fontFamily: 'var(--font-mono)' }}>
+                REAL
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--text3)', display: 'flex', gap: '6px', alignItems: 'center' }}>
+            {handle}
+            {influencer.platform && (
+              <span style={{ fontSize: '9px', color: influencer.platform === 'TikTok' ? 'var(--blue)' : 'var(--coral)', opacity: .8 }}>
+                {influencer.platform}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

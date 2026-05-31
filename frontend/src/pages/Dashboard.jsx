@@ -4,75 +4,57 @@ import Sidebar from '../components/Sidebar.jsx';
 import KPIGrid from '../components/KPIGrid.jsx';
 import SearchBar from '../components/SearchBar.jsx';
 import InfluencerTable from '../components/InfluencerTable.jsx';
-import { influencers } from '../data/index.js';
+import { influencers as fallbackData } from '../data/index.js';
 
 export default function Dashboard({ currentPage, onNavigate }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
-  const [dbInfluencers, setDbInfluencers] = useState(influencers);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [allCreators, setAllCreators] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isReal, setIsReal] = useState(false);
 
+  // Load real creators once on mount
   useEffect(() => {
-    const fetchCreators = async () => {
+    const load = async () => {
       setLoading(true);
-      setError(null);
       try {
-        const params = new URLSearchParams({
-          q: searchQuery,
-          niche: activeCategory === 'All' ? '' : activeCategory,
-          page,
-          limit: 20,
-          sort_by: 'followers',
-        });
-
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
-
-        const response = await fetch(`${config.api.endpoints.search}?${params}`, {
-          signal: controller.signal,
-        });
+        const res = await fetch(config.api.endpoints.realCreators, { signal: controller.signal });
         clearTimeout(timeout);
 
-        if (response.ok) {
-          const data = await response.json();
+        if (res.ok) {
+          const data = await res.json();
           if (data.results && data.results.length > 0) {
-            setDbInfluencers(data.results);
-            setTotalPages(data.pages);
-            setTotalCount(data.total);
-          } else {
-            // Empty results — keep existing data, no error
-            setTotalCount(0);
+            setAllCreators(data.results);
+            setIsReal(true);
+            return;
           }
         }
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          console.warn("Search timed out — using fallback data");
-        } else {
-          console.warn("Search API unavailable — using fallback data:", err.message);
-        }
-        // Fall back to static data filtered by category
-        const cat = activeCategory === 'All' ? null : activeCategory.toLowerCase();
-        const fallback = cat
-          ? influencers.filter(i => i.cat.toLowerCase().includes(cat))
-          : influencers;
-        setDbInfluencers(fallback);
-        setTotalPages(1);
-        setTotalCount(fallback.length);
-      } finally {
-        setLoading(false);
+      } catch (e) {
+        console.warn('Real creators unavailable, using fallback');
       }
+      setAllCreators(fallbackData);
+      setIsReal(false);
+      setLoading(false);
     };
+    load().finally(() => setLoading(false));
+  }, []);
 
-    fetchCreators();
-  }, [searchQuery, activeCategory, page]);
-
+  // Filter entirely on the frontend — instant, no round-trip
   const filtered = useMemo(() => {
-    return dbInfluencers;
-  }, [dbInfluencers]);
+    const q = searchQuery.toLowerCase();
+    const cat = activeCategory.toLowerCase();
+    return allCreators.filter(inf => {
+      const matchSearch = !q ||
+        inf.name.toLowerCase().includes(q) ||
+        inf.handle.toLowerCase().includes(q) ||
+        (inf.cat || '').toLowerCase().includes(q);
+      const matchCat = activeCategory === 'All' ||
+        (inf.cat || '').toLowerCase().includes(cat);
+      return matchSearch && matchCat;
+    });
+  }, [allCreators, searchQuery, activeCategory]);
 
   return (
     <div style={{ paddingTop: '56px' }}>
@@ -80,14 +62,26 @@ export default function Dashboard({ currentPage, onNavigate }) {
         <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
 
         <main style={{ padding: '2rem', overflowY: 'auto' }}>
-          {/* Page Header */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', marginBottom: '4px' }}>
-              Influencer Dashboard
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--text2)' }}>
-              Browse and filter {totalCount.toLocaleString()} creators across all platforms
-            </p>
+          <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', marginBottom: '4px' }}>
+                Influencer Dashboard
+              </h2>
+              <p style={{ fontSize: '14px', color: 'var(--text2)' }}>
+                {isReal
+                  ? `Showing ${filtered.length} real-world creators from Top100 Instagram + TikTok`
+                  : `Showing ${filtered.length} creators`}
+              </p>
+            </div>
+            {isReal && (
+              <span style={{
+                fontSize: '11px', padding: '4px 12px', borderRadius: '20px',
+                background: 'rgba(200,240,104,0.08)', color: 'var(--accent)',
+                border: '1px solid rgba(200,240,104,0.2)', fontFamily: 'var(--font-mono)',
+              }}>
+                ✓ Real Data
+              </span>
+            )}
           </div>
 
           <KPIGrid />
@@ -96,79 +90,17 @@ export default function Dashboard({ currentPage, onNavigate }) {
             searchQuery={searchQuery}
             onSearch={setSearchQuery}
             activeCategory={activeCategory}
-            onCategoryChange={setActiveCategory}
+            onCategoryChange={cat => { setActiveCategory(cat); }}
           />
 
-          {error && (
-            <div style={{ 
-              background: 'rgba(255,0,0,0.1)', 
-              color: '#ff6b6b', 
-              padding: '1rem', 
-              borderRadius: 'var(--radius)',
-              marginBottom: '1.5rem',
-              fontSize: '14px'
-            }}>
-              {error}
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="skeleton" style={{ height: '58px', borderRadius: 'var(--radius-sm)', opacity: 1 - i * 0.12 }} />
+              ))}
             </div>
-          )}
-
-          {loading && (
-            <div style={{ 
-              textAlign: 'center', 
-              padding: '2rem',
-              color: 'var(--text2)'
-            }}>
-              Loading creators...
-            </div>
-          )}
-
-          {!loading && <InfluencerTable data={filtered} />}
-
-          {/* Pagination */}
-          {totalPages > 1 && !loading && (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              gap: '8px', 
-              marginTop: '2rem',
-              alignItems: 'center'
-            }}>
-              <button 
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                style={{
-                  padding: '8px 12px',
-                  border: '1px solid var(--border)',
-                  background: page === 1 ? 'var(--bg3)' : 'var(--bg2)',
-                  color: 'var(--text)',
-                  borderRadius: 'var(--radius)',
-                  cursor: page === 1 ? 'not-allowed' : 'pointer',
-                  opacity: page === 1 ? 0.5 : 1,
-                }}
-              >
-                ← Previous
-              </button>
-              
-              <span style={{ color: 'var(--text2)', fontSize: '14px' }}>
-                Page {page} of {totalPages}
-              </span>
-              
-              <button 
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
-                disabled={page === totalPages}
-                style={{
-                  padding: '8px 12px',
-                  border: '1px solid var(--border)',
-                  background: page === totalPages ? 'var(--bg3)' : 'var(--bg2)',
-                  color: 'var(--text)',
-                  borderRadius: 'var(--radius)',
-                  cursor: page === totalPages ? 'not-allowed' : 'pointer',
-                  opacity: page === totalPages ? 0.5 : 1,
-                }}
-              >
-                Next →
-              </button>
-            </div>
+          ) : (
+            <InfluencerTable data={filtered} />
           )}
         </main>
       </div>

@@ -727,7 +727,7 @@ def platform_insights():
 
 @app.route("/api/real-creators")
 def real_creators():
-    """Returns real top influencers from Top100.csv + TikTok dataset."""
+    """Returns real top influencers formatted for the dashboard table."""
     try:
         ig_path = BACKEND_DIR.parent / 'Top100.csv'
         tt_path = BACKEND_DIR.parent / 'tiktok.csv'
@@ -735,52 +735,113 @@ def real_creators():
         ig_df = pd.read_csv(ig_path)
         tt_df = pd.read_csv(tt_path)
 
+        # Known categories for top creators
+        KNOWN_CATS = {
+            'cristiano': 'Sports',       'kyliejenner': 'Beauty',
+            'leomessi': 'Sports',        'therock': 'Fitness',
+            'kimkardashian': 'Fashion',  'selenagomez': 'Beauty',
+            'beyonce': 'Music',          'instagram': 'Lifestyle',
+            'natgeo': 'Photography',     'nike': 'Fitness',
+            'fcbarcelona': 'Sports',     'realmadrid': 'Sports',
+            'neymarjr': 'Sports',        'justinbieber': 'Music',
+            'kendalljenner': 'Fashion',  'taylorswift': 'Music',
+            'arianagrande': 'Music',     'khloekardashian': 'Fashion',
+            'virat.kohli': 'Sports',     'jlo': 'Music',
+            'dualipa': 'Music',          'zendaya': 'Fashion',
+            'khaby.lame': 'Comedy',      'charlidamelio': 'Dance',
+            'addisonre': 'Lifestyle',    'bellapoarch': 'Music',
+        }
+
         def parse_num(s):
             if pd.isna(s): return 0
-            s = str(s).strip().lower().replace(',','')
+            s = str(s).strip().lower().replace(',', '')
             if s.endswith('b'): return float(s[:-1]) * 1_000_000_000
             if s.endswith('m'): return float(s[:-1]) * 1_000_000
             if s.endswith('k'): return float(s[:-1]) * 1_000
             try: return float(s)
             except: return 0
 
-        instagram = []
-        for _, row in ig_df.head(20).iterrows():
+        def fmt_followers(n):
+            if n >= 1_000_000_000: return f"{n/1_000_000_000:.1f}B"
+            if n >= 1_000_000:     return f"{n/1_000_000:.1f}M"
+            if n >= 1_000:         return f"{n/1_000:.0f}K"
+            return str(int(n))
+
+        def avatar_colors(i):
+            palettes = [
+                ('#E1F5EE','#085041'), ('#E6F1FB','#0C447C'),
+                ('#FAEEDA','#633806'), ('#FAECE7','#4A1B0C'),
+                ('#EEEDFE','#26215C'), ('#FBEAF0','#4B1528'),
+                ('#E8FEF0','#0A4A24'), ('#FEF3E8','#4A2A0A'),
+            ]
+            return palettes[i % len(palettes)]
+
+        results = []
+
+        # Instagram Top 100
+        for i, (_, row) in enumerate(ig_df.head(50).iterrows()):
+            handle_raw = str(row.get('channel_info', '')).strip()
+            name = handle_raw.replace('_', ' ').replace('.', ' ').title()
             followers = parse_num(row.get('followers', 0))
-            er_str = str(row.get('60_day_eng_rate', '0')).replace('%','').strip()
+            er_str = str(row.get('60_day_eng_rate', '0')).replace('%', '').strip()
             try: er = float(er_str)
             except: er = 0.0
-            instagram.append({
-                'platform': 'Instagram',
-                'name': str(row.get('channel_info','')).replace('_',' ').title(),
-                'handle': f"@{row.get('channel_info','')}",
-                'followers': int(followers),
-                'followers_str': str(row.get('followers','')),
-                'influence_score': int(row.get('influence_score', 70)),
-                'engagement_rate': er,
-                'rank': int(row.get('rank', 0)),
-                'country': str(row.get('country', 'Global')),
+            influence = int(row.get('influence_score', 70))
+            auth  = min(99, max(50, influence - 2))
+            growth = min(99, max(40, int(er * 20 + 50)))
+            score = min(99, int(influence * 0.6 + er * 5 + 30))
+            tier  = 'S' if followers > 100_000_000 else 'A' if followers > 10_000_000 else 'B'
+            cat   = KNOWN_CATS.get(handle_raw.lower(), 'Lifestyle')
+            c1, c2 = avatar_colors(i)
+            results.append({
+                'id':       i + 1,
+                'name':     name,
+                'handle':   f"@{handle_raw}",
+                'cat':      cat,
+                'followers': fmt_followers(followers),
+                'er':        f"{er:.2f}%",
+                'auth':      auth,
+                'growth':    growth,
+                'score':     score,
+                'tier':      tier,
+                'av':        ''.join(p[0].upper() for p in name.split()[:2]),
+                'c1':        c1,
+                'c2':        c2,
+                'platform':  'Instagram',
+                'real':      True,
             })
 
-        tiktok = []
-        for _, row in tt_df.head(10).iterrows():
-            subs = parse_num(str(row.get('Subscribers', '0')).replace('M','m').replace('K','k'))
+        # TikTok top creators
+        for i, (_, row) in enumerate(tt_df.head(30).iterrows()):
+            name = str(row.get('Tiktoker name', ''))
+            handle_raw = str(row.get('Tiktok name', ''))
+            subs  = parse_num(str(row.get('Subscribers', '0')).replace('M','m').replace('K','k'))
             likes = parse_num(str(row.get('Likes avg.', '0')).replace('M','m').replace('K','k'))
             views = parse_num(str(row.get('Views avg.', '0')).replace('M','m').replace('K','k'))
-            er = round(likes / max(views, 1) * 100, 2)
-            tiktok.append({
-                'platform': 'TikTok',
-                'name': str(row.get('Tiktoker name', '')),
-                'handle': f"@{row.get('Tiktok name', '')}",
-                'followers': int(subs),
-                'followers_str': str(row.get('Subscribers', '')),
-                'influence_score': min(99, max(50, int(er * 3 + 60))),
-                'engagement_rate': er,
-                'rank': int(row.get('S.no', 0)),
-                'country': 'Global',
+            er    = round(likes / max(views, 1) * 100, 2)
+            score = min(99, max(50, int(er * 3 + 60)))
+            tier  = 'S' if subs > 50_000_000 else 'A' if subs > 10_000_000 else 'B'
+            cat   = KNOWN_CATS.get(handle_raw.lower(), 'Entertainment')
+            c1, c2 = avatar_colors(50 + i)
+            results.append({
+                'id':       1000 + i,
+                'name':     name,
+                'handle':   f"@{handle_raw}",
+                'cat':      cat,
+                'followers': fmt_followers(subs),
+                'er':        f"{er:.2f}%",
+                'auth':      min(99, score),
+                'growth':    min(99, score - 5),
+                'score':     score,
+                'tier':      tier,
+                'av':        ''.join(p[0].upper() for p in name.split()[:2]),
+                'c1':        c1,
+                'c2':        c2,
+                'platform':  'TikTok',
+                'real':      True,
             })
 
-        return jsonify({'instagram': instagram, 'tiktok': tiktok}), 200
+        return jsonify({'results': results, 'total': len(results), 'real': True}), 200
     except Exception as e:
         logger.error(f"Real creators failed: {e}")
         return jsonify({"error": str(e)}), 500
