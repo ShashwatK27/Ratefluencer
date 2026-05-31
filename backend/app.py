@@ -380,6 +380,55 @@ def match_creators():
             if len(formatted_recos) >= top_k:
                 break
 
+        # If ChromaDB didn't return enough category-matched creators,
+        # directly pull the best ones from the dataframe for that category
+        if len(formatted_recos) < top_k and category_filters:
+            logger.info(f"Only {len(formatted_recos)} matches from ChromaDB — filling from dataframe for {category_filters}")
+            df = engine.creators_df.copy()
+            cat_mask = df['niche'].str.lower().apply(
+                lambda n: any(cf.lower() in n or n in cf.lower() for cf in category_filters)
+            )
+            cat_df = df[cat_mask & (df['fake_account'] == 0)].sort_values(
+                'authenticity_score', ascending=False
+            )
+            existing_ids = {r['rank'] for r in formatted_recos}
+            for _, row in cat_df.iterrows():
+                if len(formatted_recos) >= top_k:
+                    break
+                cid = int(row['creator_id'])
+                if cid in existing_ids:
+                    continue
+                existing_ids.add(cid)
+                niche = str(row['niche'])
+                followers_val = int(row['followers'])
+                followers_str = (
+                    f"{followers_val/1_000_000:.1f}M" if followers_val >= 1_000_000
+                    else f"{followers_val/1_000:.0f}K"
+                )
+                auth  = int(row['authenticity_score'])
+                growth = int(row['growth_score'])
+                score = int(auth * 0.5 + growth * 0.5)
+                ring_color = '#C8F068' if score >= 80 else '#68B8F0' if score >= 60 else '#F0C96A'
+                ring_offset = int(201 * (1.0 - score / 100.0))
+                c_name = get_creator_name(cid, niche)
+                formatted_recos.append({
+                    "rank": len(formatted_recos) + 1,
+                    "name": c_name,
+                    "handle": f"@{c_name.lower().replace(' ', '_')}",
+                    "meta": f"{niche} · {followers_str} followers · Instagram",
+                    "badge": "👑 #1 Match" if len(formatted_recos) == 1 else None,
+                    "ratefluencer": score,
+                    "growth": growth,
+                    "authenticity": auth,
+                    "brandMatch": score,
+                    "successProb": f"{min(95, score + 5)}%",
+                    "engRate": f"{float(row['engagement_rate']):.1f}%",
+                    "why": f"✦ Top {niche} creator · Verified authentic",
+                    "ringColor": ring_color,
+                    "ringOffset": ring_offset,
+                    "rankClass": f"rank-{len(formatted_recos)}",
+                })
+
         insights = []
         if formatted_recos:
             first = formatted_recos[0]
