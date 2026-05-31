@@ -101,7 +101,10 @@ export default function Dashboard({ currentPage, onNavigate }) {
               ))}
             </div>
           ) : (
-            <InfluencerTable data={filtered} />
+            <InfluencerTable
+              data={filtered}
+              onCreatorClick={creator => onNavigate('creatorProfile', creator)}
+            />
           )}
         </main>
       </div>

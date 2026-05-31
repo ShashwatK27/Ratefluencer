@@ -16,6 +16,7 @@ import ShortlistPage from './pages/ShortlistPage.jsx';
 import PreferencesPage from './pages/PreferencesPage.jsx';
 import InsightsPage from './pages/InsightsPage.jsx';
 import RealCreatorsPage from './pages/RealCreatorsPage.jsx';
+import CreatorProfile from './pages/CreatorProfile.jsx';
 
 function Toast({ message, onDone }) {
   React.useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t); }, []);
@@ -30,11 +31,13 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
+  const [selectedCreator, setSelectedCreator] = useState(null);
 
   const showToast = (msg) => { setToast(msg); };
   const hideToast = () => setToast(null);
 
-  const navigate = (page) => {
+  const navigate = (page, data = null) => {
+    if (page === 'creatorProfile' && data) setSelectedCreator(data);
     setCurrentPage(page);
     window.scrollTo(0, 0);
   };
@@ -136,6 +139,13 @@ export default function App() {
       )}
       {currentPage === 'realCreators' && (
         <RealCreatorsPage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'creatorProfile' && (
+        <CreatorProfile
+          creator={selectedCreator}
+          onNavigate={navigate}
+          onBack={() => navigate('dashboard')}
+        />
       )}
 
       {toast && <Toast message={toast} onDone={hideToast} />}

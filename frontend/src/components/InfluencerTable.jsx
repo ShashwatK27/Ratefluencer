@@ -23,17 +23,18 @@ function TableHeader() {
   );
 }
 
-function TableRow({ influencer }) {
+function TableRow({ influencer, onClick }) {
   const { name, handle, followers, er, auth, growth, score, tier, av, c1, c2 } = influencer;
 
   return (
     <div
+      onClick={() => onClick(influencer)}
       style={{
         display: 'grid', gridTemplateColumns: COL,
         padding: '14px 16px', borderBottom: '1px solid var(--border)',
         alignItems: 'center', transition: 'background .15s', cursor: 'pointer',
       }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
     >
       {/* Influencer info */}
@@ -85,7 +86,7 @@ function TableRow({ influencer }) {
   );
 }
 
-export default function InfluencerTable({ data }) {
+export default function InfluencerTable({ data, onCreatorClick }) {
   if (!data.length) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text3)', fontSize: '14px' }}>
@@ -95,15 +96,13 @@ export default function InfluencerTable({ data }) {
   }
 
   return (
-    <div style={{
-      background: 'var(--bg2)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius)',
-      overflow: 'hidden',
-    }}>
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+      <div style={{ padding: '8px 16px 6px', fontSize: '11px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--border)' }}>
+        Click any creator to see their virality score →
+      </div>
       <TableHeader />
       {data.map(inf => (
-        <TableRow key={inf.id} influencer={inf} />
+        <TableRow key={inf.id} influencer={inf} onClick={onCreatorClick || (() => {})} />
       ))}
     </div>
   );
