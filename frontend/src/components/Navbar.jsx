@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
 const LINKS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'viralLab',  label: 'Viral Lab' },
-  { id: 'aiAgent',   label: 'AI Agent'  },
+  { id: 'dashboard',     label: 'Dashboard'      },
+  { id: 'viralLab',      label: 'Viral Lab'       },
+  { id: 'aiAgent',       label: 'AI Agent'        },
+  { id: 'creatorCorner', label: 'Creator Corner'  },
 ];
 
 export default function Navbar({ currentPage, onNavigate }) {

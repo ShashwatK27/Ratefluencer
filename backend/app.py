@@ -60,6 +60,29 @@ else:
 
 logger.info(f"Dataset size: {len(engine.creators_df)} creators")
 
+# In-memory campaign store — populated when brands run campaigns
+campaigns_store = []
+
+# Seed with demo campaigns so the creator corner works even before a brand runs one
+DEMO_CAMPAIGNS = [
+    {"id": "demo_1", "name": "Diwali Skincare Launch", "brand": "Nykaa", "goal": "Brand Awareness",
+     "category_filters": ["Beauty","Wellness"], "campaign_text": "Skincare beauty wellness glow serum organic India women",
+     "budget": 1000000, "ageGroup": "18–34", "country": "India", "timestamp": "2026-06-01T10:00:00"},
+    {"id": "demo_2", "name": "Protein Supplement Campaign", "brand": "MuscleBlaze", "goal": "Sales / Conversions",
+     "category_filters": ["Fitness"], "campaign_text": "Fitness gym workout protein supplement muscle strength training",
+     "budget": 500000, "ageGroup": "18–34", "country": "India", "timestamp": "2026-06-01T11:00:00"},
+    {"id": "demo_3", "name": "Food Delivery App Launch", "brand": "Swiggy", "goal": "App Downloads",
+     "category_filters": ["Food","Lifestyle"], "campaign_text": "Food delivery restaurant healthy meal cooking recipe India",
+     "budget": 750000, "ageGroup": "18–30", "country": "India", "timestamp": "2026-06-01T12:00:00"},
+    {"id": "demo_4", "name": "Tech Gadget Unboxing", "brand": "OnePlus", "goal": "Product Launch",
+     "category_filters": ["Tech","Gaming"], "campaign_text": "Technology gadget smartphone unboxing review tech product",
+     "budget": 2000000, "ageGroup": "18–34", "country": "India", "timestamp": "2026-06-01T13:00:00"},
+    {"id": "demo_5", "name": "Travel Booking Campaign", "brand": "MakeMyTrip", "goal": "Brand Awareness",
+     "category_filters": ["Travel","Photography"], "campaign_text": "Travel adventure tourism destination photography explore India",
+     "budget": 1500000, "ageGroup": "25–44", "country": "India", "timestamp": "2026-06-01T14:00:00"},
+]
+campaigns_store.extend(DEMO_CAMPAIGNS)
+
 def creator_identity(row):
     raw_name = str(row.get('creator_name') or f"creator_{int(row['creator_id'])}").strip()
     display_name = raw_name.lstrip('@') or f"creator_{int(row['creator_id'])}"
@@ -734,6 +757,24 @@ def match_creators():
                 "text": f"Micro-creators in the {primary_cat} category show a 2.5× higher save rate and 15% lower CPC than mega-influencers."
             })
 
+        # Store campaign so creators can discover it
+        campaign_entry = {
+            "id": f"live_{len(campaigns_store)}",
+            "name": data.get("campaign_text", "")[:40] + "...",
+            "brand": data.get("campaign_text", "").split(".")[0].replace("Brand/Product:", "").strip()[:30],
+            "goal": campaign_goal,
+            "category_filters": category_filters or [],
+            "campaign_text": campaign_text,
+            "budget": data.get("budget", 1000000),
+            "ageGroup": data.get("ageGroup", "18–34"),
+            "country": "India",
+            "timestamp": pd.Timestamp.now().isoformat(),
+        }
+        if not any(c["campaign_text"] == campaign_text for c in campaigns_store):
+            campaigns_store.append(campaign_entry)
+            if len(campaigns_store) > 50:
+                campaigns_store.pop(5)  # keep demo campaigns (0-4), remove oldest live ones
+
         return jsonify({
             "recommendations": formatted_recos,
             "insights": insights,
@@ -744,6 +785,71 @@ def match_creators():
     except Exception as e:
         logger.error(f"Campaign matching failed: {e}")
         return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/creator-match", methods=["POST"])
+def creator_match():
+    """Match a creator profile against all live brand campaigns."""
+    try:
+        data          = request.get_json() or {}
+        creator_niche = str(data.get("niche", "")).lower().strip()
+        followers     = int(data.get("followers", 10000))
+        er            = float(data.get("engagement_rate", 3.0))
+        handle        = str(data.get("handle", "creator")).strip()
+
+        results = []
+        for camp in campaigns_store:
+            camp_text    = (camp.get("campaign_text") or "").lower()
+            camp_cats    = [c.lower() for c in camp.get("category_filters", [])]
+
+            # Category match score
+            niche_in_cats = any(creator_niche in c or c in creator_niche for c in camp_cats)
+            niche_in_text = creator_niche in camp_text
+            cat_score     = 80 if niche_in_cats else 50 if niche_in_text else 20
+
+            # Follower tier match
+            budget = camp.get("budget", 500000)
+            if budget >= 2_000_000:
+                ideal_min, ideal_max = 500_000, float("inf")   # mega
+            elif budget >= 1_000_000:
+                ideal_min, ideal_max = 100_000, 1_000_000      # macro
+            elif budget >= 500_000:
+                ideal_min, ideal_max = 10_000, 500_000         # micro
+            else:
+                ideal_min, ideal_max = 1_000, 100_000          # nano/micro
+            tier_score = 100 if ideal_min <= followers <= ideal_max else 50
+
+            # Engagement quality
+            er_score = min(100, er * 15)
+
+            # Weighted match
+            match_pct = round(cat_score * 0.5 + tier_score * 0.3 + er_score * 0.2)
+
+            if match_pct >= 35:
+                results.append({
+                    "campaign_id":  camp["id"],
+                    "brand":        camp.get("brand", "Brand"),
+                    "name":         camp.get("name", "Campaign"),
+                    "goal":         camp.get("goal", "Brand Awareness"),
+                    "categories":   camp.get("category_filters", []),
+                    "budget_label": (
+                        f"₹{budget/100000:.0f}L" if budget >= 100000
+                        else f"₹{budget:,}"
+                    ),
+                    "match_score":  match_pct,
+                    "why":          (
+                        f"Strong {creator_niche} category fit" if niche_in_cats
+                        else f"Content overlap with {camp.get('goal','campaign')} goals"
+                    ),
+                    "is_demo":      camp["id"].startswith("demo_"),
+                })
+
+        results.sort(key=lambda x: x["match_score"], reverse=True)
+        return jsonify({"campaigns": results[:10], "total": len(results)}), 200
+
+    except Exception as e:
+        logger.error(f"Creator match failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 def _parse_groq_json(raw: str) -> dict:

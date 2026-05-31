@@ -18,6 +18,7 @@ import InsightsPage from './pages/InsightsPage.jsx';
 import RealCreatorsPage from './pages/RealCreatorsPage.jsx';
 import CreatorProfile from './pages/CreatorProfile.jsx';
 import TrendRanking from './pages/TrendRanking.jsx';
+import CreatorCorner from './pages/CreatorCorner.jsx';
 
 function Toast({ message, onDone }) {
   React.useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t); }, []);
@@ -146,6 +147,9 @@ export default function App() {
       )}
       {currentPage === 'trendRanking' && (
         <TrendRanking currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'creatorCorner' && (
+        <CreatorCorner onNavigate={navigate} />
       )}
       {currentPage === 'creatorProfile' && (
         <CreatorProfile
