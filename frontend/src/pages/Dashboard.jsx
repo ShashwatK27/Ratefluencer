@@ -41,7 +41,7 @@ export default function Dashboard({ currentPage, onNavigate }) {
     load().finally(() => setLoading(false));
   }, []);
 
-  // Filter entirely on the frontend — instant, no round-trip
+  // Filter real creators on the frontend — instant, no round-trip
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     const cat = activeCategory.toLowerCase();
@@ -49,7 +49,8 @@ export default function Dashboard({ currentPage, onNavigate }) {
       const matchSearch = !q ||
         inf.name.toLowerCase().includes(q) ||
         inf.handle.toLowerCase().includes(q) ||
-        (inf.cat || '').toLowerCase().includes(q);
+        (inf.cat || '').toLowerCase().includes(q) ||
+        (inf.platform || '').toLowerCase().includes(q);
       const matchCat = activeCategory === 'All' ||
         (inf.cat || '').toLowerCase().includes(cat);
       return matchSearch && matchCat;
