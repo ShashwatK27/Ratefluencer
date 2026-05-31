@@ -116,6 +116,8 @@ export const sidebarNav = {
     { icon: '🛡️', label: 'Authenticity',  page: 'authenticity',  iconBg: 'var(--coral-dim)'  },
     { icon: '📈', label: 'Growth Engine', page: 'growthEngine',  iconBg: 'var(--purple-dim)' },
     { icon: '🏷️', label: 'Brand Match',   page: 'brandMatch',    iconBg: 'var(--accent-dim)' },
+    { icon: '📊', label: 'Real Insights', page: 'insights',      iconBg: 'var(--gold-dim)'   },
+    { icon: '🌍', label: 'Real Creators', page: 'realCreators',  iconBg: 'var(--blue-dim)'   },
   ],
   settings: [
     { icon: '📋', label: 'Shortlist',    page: 'shortlist',    iconBg: 'rgba(255,255,255,0.05)' },

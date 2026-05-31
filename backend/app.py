@@ -6,6 +6,7 @@ import os
 import json
 from pathlib import Path
 from ratefluencer_engine import RatefluencerEngine
+from viral_predictor import ViralPredictor
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -39,6 +40,7 @@ logger.info("Initializing Ratefluencer AI Orchestrator inside Flask server...")
 logger.info(f"Using creators CSV from: {CREATORS_CSV}")
 logger.info(f"Dataset size: {len(pd.read_csv(CREATORS_CSV))} creators")
 engine = RatefluencerEngine(creators_csv=str(CREATORS_CSV))
+viral_predictor = ViralPredictor()
 
 # 50 names so nearby creator IDs don't collide (Fix #10)
 CREATOR_NAMES = [
@@ -397,31 +399,44 @@ def _parse_groq_json(raw: str) -> dict:
 
 @app.route("/api/generate-content", methods=["POST"])
 def generate_content():
-    """Generate viral reel idea, script, caption, and hashtags for a given topic."""
+    """Generate viral reel idea, script, caption, and hashtags — with real data optimization."""
     try:
         data = request.get_json() or {}
         topic = data.get("topic", "").strip()
+        tone  = data.get("tone", "Inspirational")
+        content_category = data.get("content_category", "Lifestyle")
 
         if not topic:
             return jsonify({"error": "topic is required"}), 400
 
+        # Get real data insights for this category
+        insights = viral_predictor.get_content_insights(content_category)
+        best_hours   = insights.get('best_hours', [18, 12, 20])
+        best_days    = insights.get('best_days', ['Wednesday', 'Friday'])
+        opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
+        best_media   = insights.get('best_media_type', 'reel')
+
         logger.info(f"Generating viral content for topic: '{topic}'")
 
         prompt = f"""You are a viral social media content strategist specialising in Instagram Reels.
-Generate viral content for this topic: "{topic}"
+Generate {tone.lower()} viral content for this topic: "{topic}"
+
+Data-driven context from real Instagram analytics (30K posts):
+- Best posting hours: {best_hours[0]}:00–{best_hours[-1]}:00
+- Optimal hashtag count: {opt_hashtags[0]}–{opt_hashtags[1]}
+- Best performing format: {best_media}
 
 Return ONLY a valid JSON object with these exact keys (no extra text):
 {{
   "trend_score": <integer 0-100, how trending this topic is right now>,
   "reel_idea": "<1-2 sentence creative reel concept>",
   "script": "<60-second reel script with hook, body, and CTA>",
-  "caption": "<engaging Instagram caption under 150 words>",
-  "hashtags": "<10-15 relevant hashtags separated by spaces>",
-  "virality_score": <integer 0-100, predicted virality>
+  "caption": "<engaging Instagram caption under 150 words with strong CTA>",
+  "hashtags": "<exactly {opt_hashtags[0]} to {opt_hashtags[1]} relevant hashtags separated by spaces>"
 }}"""
 
         response = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1024,
@@ -433,6 +448,25 @@ Return ONLY a valid JSON object with these exact keys (no extra text):
         if not result:
             return jsonify({"error": "Failed to parse AI response"}), 500
 
+        # Count hashtags in generated content to score against real data
+        hashtag_count = len(result.get('hashtags', '').split())
+        has_cta = int(any(w in result.get('caption','').lower() for w in ['click','link','bio','comment','share','follow','save','dm']))
+
+        viral_score_result = viral_predictor.predict({
+            'content_category': content_category,
+            'hashtags_count': hashtag_count,
+            'has_call_to_action': has_cta,
+            'post_hour': best_hours[0],
+            'day_of_week': best_days[0],
+            'media_type': best_media,
+        })
+
+        result['virality_score'] = viral_score_result['viral_score']
+        result['predicted_bucket'] = viral_score_result['predicted_bucket']
+        result['optimization_tips'] = viral_score_result.get('optimization_tips', [])
+        result['best_post_time'] = f"{best_hours[0]}:00 on {best_days[0]}"
+        result['data_source'] = f"Optimised using {insights.get('data_points', 3000):,} real {content_category} posts"
+
         return jsonify(result), 200
 
     except Exception as e:
@@ -442,7 +476,10 @@ Return ONLY a valid JSON object with these exact keys (no extra text):
 
 @app.route("/api/run-agent", methods=["POST"])
 def run_agent():
-    """Autonomous agent: discover trend → find influencer → generate content → predict success."""
+    """
+    Autonomous agent with feedback loop:
+    discover trend → find influencer → [retry if low score] → generate content → predict success
+    """
     try:
         data = request.get_json() or {}
         goal = data.get("goal", "").strip()
@@ -452,61 +489,76 @@ def run_agent():
 
         logger.info(f"Running autonomous agent for goal: '{goal}'")
 
-        CREATOR_NAMES = ["Aarav Mehta", "Ananya Sharma", "Kabir Kapoor",
-                         "Pooja Malhotra", "Rohan Sen", "Aditi Rao",
-                         "Ishaan Roy", "Kiara Joshi"]
-
         # Step 1 — Discover trend
         trend_prompt = f"""You are a social media trend analyst.
 For this campaign goal: "{goal}"
 
 Identify the single most relevant trending topic right now.
-Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentences>"}}"""
+Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentences>", "category": "<one of: Fitness, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>"}}"""
 
         trend_resp = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": trend_prompt}],
             temperature=0.5,
-            max_tokens=150,
+            max_tokens=200,
         )
         trend_data = _parse_groq_json(trend_resp.choices[0].message.content.strip())
-        trend = trend_data.get("trend", "Sustainable lifestyle and wellness content is surging across Gen-Z audiences.")
+        trend = trend_data.get("trend", "Sustainable lifestyle content is surging across Gen-Z audiences.")
+        detected_category = trend_data.get("category", "Lifestyle")
 
-        # Step 2 — Find best influencer via ML engine
+        # Step 2 — Find best influencer via ML engine (with feedback loop)
         match_results = engine.brand_matcher.match(
             brand_campaign=goal,
-            top_k=10,
+            top_k=15,
             min_confidence=0.05
         )
 
         best_creator = None
+        iterations = 0
         for match in match_results.get("top_matches", []):
             creator_id = int(match["creator_id"])
             score_res = engine.score_creator(creator_id=creator_id, campaign_text=goal)
-            if score_res["risk_metrics"]["risk_level"] != "High":
-                score_res["display_name"] = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
-                best_creator = score_res
-                break
+            iterations += 1
 
-        influencer_name = best_creator["display_name"] if best_creator else "Ananya Sharma"
-        virality_score = int(best_creator["scores"]["growth_score"]) if best_creator else 72
-        campaign_success = int(best_creator["success_probability"] * 100) if best_creator else 75
+            # Feedback loop: skip low-scoring or high-risk creators
+            if score_res["risk_metrics"]["risk_level"] == "High":
+                logger.info(f"Agent feedback: skipping creator {creator_id} (High risk)")
+                continue
+            if score_res["success_probability"] < 0.55 and iterations < 10:
+                logger.info(f"Agent feedback: skipping creator {creator_id} (low success prob {score_res['success_probability']:.0%})")
+                continue
+
+            score_res["display_name"] = CREATOR_NAMES[creator_id % len(CREATOR_NAMES)]
+            best_creator = score_res
+            break
+
+        influencer_name   = best_creator["display_name"]        if best_creator else "Ananya Sharma"
+        virality_score    = int(best_creator["scores"]["growth_score"])  if best_creator else 72
+        campaign_success  = int(best_creator["success_probability"]*100) if best_creator else 75
+        influencer_niche  = best_creator.get("niche", detected_category) if best_creator else detected_category
+
+        # Get real data insights for the detected category
+        insights = viral_predictor.get_content_insights(detected_category)
+        best_hours = insights.get('best_hours', [18, 12])
+        best_days  = insights.get('best_days', ['Wednesday', 'Friday'])
+        opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
 
         # Step 3 — Generate content for that influencer
         content_prompt = f"""You are a viral content creator for Instagram.
 Campaign goal: {goal}
 Trending topic: {trend}
-Assigned influencer: {influencer_name}
+Assigned influencer: {influencer_name} (niche: {influencer_niche})
+Data insight: Best posting time is {best_hours[0]}:00 on {best_days[0]}, use {opt_hashtags[0]}–{opt_hashtags[1]} hashtags
 
 Generate a reel idea and a caption tailored to this influencer and trend.
 Return ONLY JSON (no other text):
 {{
   "reel_idea": "<creative 1-2 sentence reel concept>",
-  "caption": "<engaging Instagram caption under 100 words>"
+  "caption": "<engaging Instagram caption under 100 words with a clear CTA>"
 }}"""
 
         content_resp = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": content_prompt}],
             temperature=0.7,
             max_tokens=400,
@@ -514,16 +566,143 @@ Return ONLY JSON (no other text):
         content_data = _parse_groq_json(content_resp.choices[0].message.content.strip())
 
         return jsonify({
-            "trend":           trend,
-            "influencer":      influencer_name,
-            "reel_idea":       content_data.get("reel_idea", "Create an authentic day-in-the-life reel showcasing real product use."),
-            "caption":         content_data.get("caption", "Real results, real people. Discover the difference. #sponsored"),
-            "virality_score":  virality_score,
+            "trend":            trend,
+            "category":         detected_category,
+            "influencer":       influencer_name,
+            "reel_idea":        content_data.get("reel_idea", "Create an authentic day-in-the-life reel showcasing real product use."),
+            "caption":          content_data.get("caption", "Real results, real people. Discover the difference. #sponsored"),
+            "virality_score":   virality_score,
             "campaign_success": campaign_success,
+            "best_post_time":   f"{best_hours[0]}:00 on {best_days[0]}",
+            "agent_iterations": iterations,
+            "data_backed":      True,
         }), 200
 
     except Exception as e:
         logger.error(f"Agent run failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/viral-predict", methods=["POST"])
+def viral_predict():
+    """Score a content brief against real Instagram performance benchmarks."""
+    try:
+        data = request.get_json() or {}
+        result = viral_predictor.predict({
+            'content_category': data.get('content_category', 'Lifestyle'),
+            'hashtags_count':   data.get('hashtags_count', 10),
+            'caption_length':   data.get('caption_length', 150),
+            'has_call_to_action': int(data.get('has_call_to_action', 1)),
+            'post_hour':        data.get('post_hour', 18),
+            'day_of_week':      data.get('day_of_week', 'Wednesday'),
+            'media_type':       data.get('media_type', 'reel'),
+            'follower_count':   data.get('follower_count', 50000),
+        })
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Viral predict failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/platform-insights")
+def platform_insights():
+    """Real Instagram performance insights by category."""
+    try:
+        ig_csv = BACKEND_DIR.parent / 'Instagram_Analytics.csv'
+        df = pd.read_csv(ig_csv)
+
+        cat_stats = []
+        for cat in df['content_category'].unique():
+            cdf = df[df['content_category'] == cat]
+            viral_count = len(cdf[cdf['performance_bucket_label'].isin(['viral','high'])])
+            cat_stats.append({
+                'category': cat,
+                'total_posts': len(cdf),
+                'viral_rate': round(viral_count / len(cdf) * 100, 1),
+                'avg_engagement_rate': round(float(cdf['engagement_rate'].mean()) * 100, 2),
+                'avg_hashtags': round(float(cdf['hashtags_count'].mean()), 1),
+                'best_media': cdf[cdf['performance_bucket_label'].isin(['viral','high'])].groupby('media_type').size().idxmax()
+                    if len(cdf[cdf['performance_bucket_label'].isin(['viral','high'])]) > 0 else 'reel',
+            })
+
+        hour_df = df[df['performance_bucket_label'].isin(['viral','high'])].groupby('post_hour').size().reset_index()
+        hour_df.columns = ['hour', 'count']
+
+        day_df = df[df['performance_bucket_label'].isin(['viral','high'])].groupby('day_of_week').size().reset_index()
+        day_df.columns = ['day', 'count']
+
+        summary = viral_predictor.get_platform_summary()
+
+        return jsonify({
+            'category_stats': sorted(cat_stats, key=lambda x: x['viral_rate'], reverse=True),
+            'hourly_distribution': hour_df.to_dict('records'),
+            'daily_distribution': day_df.to_dict('records'),
+            'platform_summary': summary,
+            'total_posts': len(df),
+        }), 200
+    except Exception as e:
+        logger.error(f"Platform insights failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/real-creators")
+def real_creators():
+    """Returns real top influencers from Top100.csv + TikTok dataset."""
+    try:
+        ig_path = BACKEND_DIR.parent / 'Top100.csv'
+        tt_path = BACKEND_DIR.parent / 'tiktok.csv'
+
+        ig_df = pd.read_csv(ig_path)
+        tt_df = pd.read_csv(tt_path)
+
+        def parse_num(s):
+            if pd.isna(s): return 0
+            s = str(s).strip().lower().replace(',','')
+            if s.endswith('b'): return float(s[:-1]) * 1_000_000_000
+            if s.endswith('m'): return float(s[:-1]) * 1_000_000
+            if s.endswith('k'): return float(s[:-1]) * 1_000
+            try: return float(s)
+            except: return 0
+
+        instagram = []
+        for _, row in ig_df.head(20).iterrows():
+            followers = parse_num(row.get('followers', 0))
+            er_str = str(row.get('60_day_eng_rate', '0')).replace('%','').strip()
+            try: er = float(er_str)
+            except: er = 0.0
+            instagram.append({
+                'platform': 'Instagram',
+                'name': str(row.get('channel_info','')).replace('_',' ').title(),
+                'handle': f"@{row.get('channel_info','')}",
+                'followers': int(followers),
+                'followers_str': str(row.get('followers','')),
+                'influence_score': int(row.get('influence_score', 70)),
+                'engagement_rate': er,
+                'rank': int(row.get('rank', 0)),
+                'country': str(row.get('country', 'Global')),
+            })
+
+        tiktok = []
+        for _, row in tt_df.head(10).iterrows():
+            subs = parse_num(str(row.get('Subscribers', '0')).replace('M','m').replace('K','k'))
+            likes = parse_num(str(row.get('Likes avg.', '0')).replace('M','m').replace('K','k'))
+            views = parse_num(str(row.get('Views avg.', '0')).replace('M','m').replace('K','k'))
+            er = round(likes / max(views, 1) * 100, 2)
+            tiktok.append({
+                'platform': 'TikTok',
+                'name': str(row.get('Tiktoker name', '')),
+                'handle': f"@{row.get('Tiktok name', '')}",
+                'followers': int(subs),
+                'followers_str': str(row.get('Subscribers', '')),
+                'influence_score': min(99, max(50, int(er * 3 + 60))),
+                'engagement_rate': er,
+                'rank': int(row.get('S.no', 0)),
+                'country': 'Global',
+            })
+
+        return jsonify({'instagram': instagram, 'tiktok': tiktok}), 200
+    except Exception as e:
+        logger.error(f"Real creators failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 

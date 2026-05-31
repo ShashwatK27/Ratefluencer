@@ -3,18 +3,19 @@ import axios from "axios";
 import { config } from "../config.js";
 
 const TONES = ["Inspirational", "Humorous", "Educational", "Trendy", "Authentic"];
+const CATEGORIES = ["Lifestyle","Fitness","Beauty","Fashion","Technology","Food","Travel","Music","Photography","Comedy"];
 
 const RESULT_FIELDS = [
   { key: "reel_idea",      icon: "🎬", label: "Reel Idea" },
   { key: "script",         icon: "📝", label: "Script",        mono: true },
   { key: "caption",        icon: "📱", label: "Caption" },
   { key: "hashtags",       icon: "🏷️", label: "Hashtags" },
-  { key: "virality_score", icon: "🚀", label: "Virality Score", suffix: "%" },
 ];
 
 export default function ViralLab() {
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Inspirational");
+  const [category, setCategory] = useState("Lifestyle");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -27,7 +28,9 @@ export default function ViralLab() {
       setResult(null);
 
       const response = await axios.post(config.api.endpoints.generateContent, {
-        topic: `${topic} (tone: ${tone})`,
+        topic,
+        tone,
+        content_category: category,
       });
 
       setResult(response.data);
@@ -106,6 +109,13 @@ export default function ViralLab() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "13px", color: "var(--text2)" }}>Content Category</label>
+              <select value={category} onChange={e => setCategory(e.target.value)}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <label style={{ fontSize: "13px", color: "var(--text2)" }}>Content Tone</label>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 {TONES.map(t => (
@@ -157,33 +167,55 @@ export default function ViralLab() {
         {result && (
           <div style={{ marginTop: "2.5rem" }}>
 
-            {result.trend_score != null && (
-              <div className="fade-up" style={{
-                background: "var(--accent-dim)", border: "1px solid rgba(200,240,104,0.2)",
-                borderRadius: "var(--radius)", padding: "1.25rem 1.5rem",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                marginBottom: "12px",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                  <span style={{ fontSize: "24px" }}>🔥</span>
-                  <div>
-                    <div style={{ fontSize: "11px", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--accent)", fontFamily: "var(--font-mono)", marginBottom: "2px" }}>
-                      Trend Score
-                    </div>
-                    <div style={{ fontFamily: "var(--font-display)", fontSize: "32px", color: "var(--accent)", lineHeight: 1 }}>
-                      {result.trend_score}
-                    </div>
+            {/* Scores strip */}
+            <div className="fade-up" style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "12px",
+            }}>
+              {[
+                { label: "Virality Score", value: result.virality_score, suffix: "%", color: "var(--accent)", icon: "🚀",
+                  sub: result.predicted_bucket ? `Predicted: ${result.predicted_bucket.toUpperCase()}` : null },
+                { label: "Trend Score", value: result.trend_score, suffix: "", color: "var(--gold)", icon: "🔥",
+                  sub: "Current topic momentum" },
+                { label: "Best Post Time", value: result.best_post_time || "18:00 Wed", suffix: "", color: "var(--blue)", icon: "⏰",
+                  sub: "Based on real data" },
+              ].map(item => item.value != null && (
+                <div key={item.label} style={{
+                  background: "var(--bg2)", border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)", padding: "1rem 1.25rem",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "16px" }}>{item.icon}</span>
+                    <span style={{ fontSize: "11px", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>{item.label}</span>
                   </div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: "26px", color: item.color, lineHeight: 1 }}>
+                    {item.value}{item.suffix}
+                  </div>
+                  {item.sub && <div style={{ fontSize: "11px", color: "var(--text3)", marginTop: "3px" }}>{item.sub}</div>}
                 </div>
-                <button
-                  onClick={generateContent}
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: "12px" }}
-                >
-                  ↻ Regenerate
-                </button>
+              ))}
+            </div>
+
+            {/* Real data optimization tips */}
+            {result.optimization_tips && result.optimization_tips.length > 0 && (
+              <div className="fade-up" style={{
+                background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.15)",
+                borderRadius: "var(--radius)", padding: "1rem 1.25rem", marginBottom: "12px",
+              }}>
+                <div style={{ fontSize: "11px", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--accent)", fontFamily: "var(--font-mono)", marginBottom: "8px" }}>
+                  📊 Data-Driven Optimisation · {result.data_source}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {result.optimization_tips.map((tip, i) => (
+                    <div key={i} style={{ fontSize: "12px", color: tip.startsWith("✓") ? "var(--accent)" : "var(--text2)" }}>{tip}</div>
+                  ))}
+                </div>
               </div>
             )}
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <div className="section-label">Generated Content</div>
+              <button onClick={generateContent} className="btn btn-ghost btn-sm" style={{ fontSize: "12px" }}>↻ Regenerate</button>
+            </div>
 
             <div className="section-label" style={{ marginBottom: "12px" }}>Generated Content</div>
 

@@ -14,6 +14,8 @@ import GrowthEnginePage from './pages/GrowthEnginePage.jsx';
 import BrandMatchPage from './pages/BrandMatchPage.jsx';
 import ShortlistPage from './pages/ShortlistPage.jsx';
 import PreferencesPage from './pages/PreferencesPage.jsx';
+import InsightsPage from './pages/InsightsPage.jsx';
+import RealCreatorsPage from './pages/RealCreatorsPage.jsx';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState('landing');
@@ -118,6 +120,12 @@ export default function App() {
       )}
       {currentPage === 'preferences' && (
         <PreferencesPage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'insights' && (
+        <InsightsPage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'realCreators' && (
+        <RealCreatorsPage currentPage={currentPage} onNavigate={navigate} />
       )}
 
       {loading && (

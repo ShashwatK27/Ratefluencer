@@ -17,6 +17,9 @@ export const config = {
       generateContent: `${API_URL}/api/generate-content`,
       agent: `${API_URL}/api/run-agent`,
       stats: `${API_URL}/api/stats`,
+      viralPredict: `${API_URL}/api/viral-predict`,
+      platformInsights: `${API_URL}/api/platform-insights`,
+      realCreators: `${API_URL}/api/real-creators`,
     }
   },
   app: {
