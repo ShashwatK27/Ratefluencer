@@ -749,28 +749,45 @@ def match_creators():
 def _parse_groq_json(raw: str) -> dict:
     """Extract and parse the first JSON object from a Groq response string."""
     import re
-    start = raw.find('{')
-    end = raw.rfind('}') + 1
+
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    cleaned = re.sub(r'```(?:json)?\s*', '', raw).strip()
+
+    start = cleaned.find('{')
+    end   = cleaned.rfind('}') + 1
     if start < 0 or end <= start:
         return {}
-    snippet = raw[start:end]
-    # Try direct parse first
+    snippet = cleaned[start:end]
+
+    # Try direct parse
     try:
         return json.loads(snippet)
     except json.JSONDecodeError:
         pass
-    # Fix unescaped newlines inside JSON string values
+
+    # Fix newlines inside JSON string values (not structural newlines)
+    # Walk char-by-char, track whether we're inside a string
+    result = []
+    in_string = False
+    escape_next = False
+    for ch in snippet:
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+        elif ch == '\\' and in_string:
+            result.append(ch)
+            escape_next = True
+        elif ch == '"':
+            in_string = not in_string
+            result.append(ch)
+        elif ch in ('\n', '\r', '\t') and in_string:
+            # Escape control chars inside strings
+            result.append('\\n' if ch == '\n' else '\\r' if ch == '\r' else '\\t')
+        else:
+            result.append(ch)
+
     try:
-        fixed = re.sub(r'(?<!\\)\n', r'\\n', snippet)
-        fixed = re.sub(r'(?<!\\)\r', r'\\r', fixed)
-        return json.loads(fixed)
-    except Exception:
-        pass
-    # Last resort: strip all control chars
-    try:
-        cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', snippet)
-        cleaned = re.sub(r'(?<!\\)\n', r'\\n', cleaned)
-        return json.loads(cleaned)
+        return json.loads(''.join(result))
     except Exception:
         return {}
 
