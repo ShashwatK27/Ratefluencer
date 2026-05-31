@@ -1077,10 +1077,23 @@ def generate_linkedin():
         insights = viral_predictor.get_content_insights(category)
         opt_hashtags = insights.get('optimal_hashtag_range', (5, 8))
 
+        # Use feedback history to improve output (requirement #7)
+        feedback_history = data.get("feedback_history", [])
+        improvement_note = ""
+        if feedback_history:
+            positive = sum(1 for f in feedback_history if f.get("vote") == "up")
+            negative = sum(1 for f in feedback_history if f.get("vote") == "down")
+            total    = len(feedback_history)
+            if negative > positive:
+                improvement_note = f"\nLearning from {total} previous feedbacks ({negative} downvotes): Make this content MORE engaging, creative, and punchy than previous attempts. Avoid being too formal or generic."
+                tone = "Inspirational" if tone == "Professional" else tone
+            elif positive > 0:
+                improvement_note = f"\nLearning from {total} previous feedbacks ({positive} upvotes): Continue using this successful {tone} style — users responded well to it."
+
         prompt = f"""You are a LinkedIn content strategist who creates viral professional content.
 Write a LinkedIn post for this topic: "{topic}"
 Tone: {tone}
-Industry/Category: {category}
+Industry/Category: {category}{improvement_note}
 
 Return ONLY a valid JSON object:
 {{

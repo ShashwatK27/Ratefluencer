@@ -387,12 +387,13 @@ export default function LandingPage({ onNavigate }) {
               icon: '🤖',
               color: 'var(--gold)',
               items: [
-                { label: 'Discover trends automatically', done: true },
-                { label: 'Generate Instagram captions', done: true },
+                { label: 'Discover & rank trends automatically', done: true },
+                { label: 'Create short-form video scripts', done: true },
                 { label: 'Generate LinkedIn posts', done: true },
+                { label: 'Generate Instagram captions', done: true },
                 { label: 'Predict virality before publishing', done: true },
-                { label: 'Learn from engagement feedback', done: true },
-                { label: 'Improve future recommendations', done: true },
+                { label: 'Learn from engagement feedback (👍/👎)', done: true },
+                { label: 'Continuously improve LinkedIn recommendations', done: true },
               ]
             },
           ].map(section => (

@@ -88,6 +88,11 @@ export default function ViralLab({ onNavigate }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const linkedinFeedbackCount = (() => {
+    try { return JSON.parse(localStorage.getItem('ratefluencer_feedback') || '[]').filter(f => f.key?.includes('linkedin')).length; }
+    catch { return 0; }
+  })();
+
   const generate = async () => {
     if (!topic.trim()) return;
     try {
@@ -99,7 +104,15 @@ export default function ViralLab({ onNavigate }) {
         ? config.api.endpoints.generateLinkedin
         : config.api.endpoints.generateContent;
 
-      const response = await axios.post(endpoint, { topic, tone, content_category: category });
+      // Send feedback history for LinkedIn improvement (requirement #7)
+      const feedbackHistory = platform === "linkedin"
+        ? JSON.parse(localStorage.getItem('ratefluencer_feedback') || '[]').filter(f => f.key?.includes('linkedin'))
+        : [];
+
+      const response = await axios.post(endpoint, {
+        topic, tone, content_category: category,
+        feedback_history: feedbackHistory,
+      });
       setResult(response.data);
     } catch (err) {
       console.error(err);
@@ -145,6 +158,14 @@ export default function ViralLab({ onNavigate }) {
             Generate platform-optimised content for Instagram Reels or LinkedIn — backed by real data.
           </p>
         </div>
+
+        {/* Learning indicator for LinkedIn */}
+        {platform === "linkedin" && linkedinFeedbackCount > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "rgba(104,184,240,0.06)", border: "1px solid rgba(104,184,240,0.2)", borderRadius: "var(--radius-sm)", marginBottom: "12px", fontSize: "12px", color: "var(--blue)" }}>
+            <span>🧠</span>
+            <span>AI is learning from your {linkedinFeedbackCount} previous LinkedIn feedback{linkedinFeedbackCount > 1 ? 's' : ''} — content improves with each generation</span>
+          </div>
+        )}
 
         {/* Platform tabs */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "1.5rem" }}>
