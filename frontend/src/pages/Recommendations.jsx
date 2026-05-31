@@ -178,7 +178,7 @@ function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
 }
 
 // ── Main page ────────────────────────────────────────────────────────────────
-export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate, onToast }) {
+export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate, onToast, hasLastForm }) {
   const { cats = 'Wellness + Skincare', budget = '₹10L', budgetRaw = null, ageGroup = '25–34' } = campaignMeta || {};
   const [shortlisted, setShortlisted] = useState(() => {
     try { return new Set((JSON.parse(localStorage.getItem('ratefluencer_shortlist') || '[]')).map(c => c.name)); }
@@ -240,6 +240,11 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
                 📋 View Shortlist {shortlisted.size > 0 && `(${shortlisted.size})`}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>⬇ Export PDF</button>
+              {hasLastForm && (
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('campaign')}>
+                  ✏️ Edit Campaign
+                </button>
+              )}
               <button className="btn btn-primary btn-sm" onClick={() => onNavigate('campaign')}>New Campaign</button>
             </div>
           </div>

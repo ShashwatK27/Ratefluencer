@@ -78,9 +78,9 @@ function StepIndicator({ current }) {
   );
 }
 
-export default function Campaign({ onNavigate, onCampaignSubmit }) {
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({
+export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) {
+  const [step, setStep] = useState(initialForm ? 5 : 1);
+  const [form, setForm] = useState(initialForm || {
     name: '', brand: '', goal: 'Brand Awareness',
     budget: 1000000,
     ageGroup: '25–34', audience: '', country: 'India', gender: 'All',

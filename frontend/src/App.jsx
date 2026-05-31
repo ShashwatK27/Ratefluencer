@@ -33,6 +33,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const [selectedCreator, setSelectedCreator] = useState(null);
+  const [lastFormData, setLastFormData] = useState(null);
 
   const showToast = (msg) => { setToast(msg); };
   const hideToast = () => setToast(null);
@@ -44,6 +45,7 @@ export default function App() {
   };
 
   const handleCampaignSubmit = async (formData) => {
+    setLastFormData(formData);
     setLoading(true);
     setError(null);
 
@@ -103,7 +105,7 @@ export default function App() {
         <Dashboard currentPage={currentPage} onNavigate={navigate} />
       )}
       {currentPage === 'campaign' && (
-        <Campaign onNavigate={navigate} onCampaignSubmit={handleCampaignSubmit} />
+        <Campaign onNavigate={navigate} onCampaignSubmit={handleCampaignSubmit} initialForm={lastFormData} />
       )}
       {currentPage === 'recommendations' && (
         <Recommendations
@@ -112,6 +114,7 @@ export default function App() {
           insights={insights}
           onNavigate={navigate}
           onToast={showToast}
+          hasLastForm={!!lastFormData}
         />
       )}
       {currentPage === 'viralLab' && (
