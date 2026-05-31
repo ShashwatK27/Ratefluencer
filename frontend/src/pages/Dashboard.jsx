@@ -10,35 +10,48 @@ export default function Dashboard({ currentPage, onNavigate }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [dbInfluencers, setDbInfluencers] = useState(influencers);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
-    const fetchFeatured = async () => {
+    const fetchCreators = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const response = await fetch(config.api.endpoints.influencers);
+        const params = new URLSearchParams({
+          q: searchQuery,
+          niche: activeCategory === 'All' ? '' : activeCategory,
+          page: page,
+          limit: 20,
+          sort_by: 'followers'
+        });
+        
+        const response = await fetch(`${config.api.endpoints.search}?${params}`);
         if (response.ok) {
           const data = await response.json();
-          if (data && data.length > 0) {
-            setDbInfluencers(data);
+          if (data.results && data.results.length > 0) {
+            setDbInfluencers(data.results);
+            setTotalPages(data.pages);
+            setTotalCount(data.total);
           }
         }
       } catch (err) {
-        console.warn("Failed to fetch featured creators, using high-fidelity fallback:", err);
+        console.warn("Failed to fetch creators from search API:", err);
+        setError("Failed to load creators");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchFeatured();
-  }, []);
+
+    fetchCreators();
+  }, [searchQuery, activeCategory, page]);
 
   const filtered = useMemo(() => {
-    return dbInfluencers.filter(inf => {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch = !q ||
-        inf.name.toLowerCase().includes(q) ||
-        inf.handle.includes(q) ||
-        inf.cat.toLowerCase().includes(q);
-      const matchesCat = activeCategory === 'All' || inf.cat === activeCategory;
-      return matchesSearch && matchesCat;
-    });
-  }, [dbInfluencers, searchQuery, activeCategory]);
+    return dbInfluencers;
+  }, [dbInfluencers]);
 
   return (
     <div style={{ paddingTop: '56px' }}>
@@ -52,7 +65,7 @@ export default function Dashboard({ currentPage, onNavigate }) {
               Influencer Dashboard
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text2)' }}>
-              Monitor and analyze creators across all platforms
+              Browse and filter {totalCount.toLocaleString()} creators across all platforms
             </p>
           </div>
 
@@ -65,7 +78,77 @@ export default function Dashboard({ currentPage, onNavigate }) {
             onCategoryChange={setActiveCategory}
           />
 
-          <InfluencerTable data={filtered} />
+          {error && (
+            <div style={{ 
+              background: 'rgba(255,0,0,0.1)', 
+              color: '#ff6b6b', 
+              padding: '1rem', 
+              borderRadius: 'var(--radius)',
+              marginBottom: '1.5rem',
+              fontSize: '14px'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {loading && (
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '2rem',
+              color: 'var(--text2)'
+            }}>
+              Loading creators...
+            </div>
+          )}
+
+          {!loading && <InfluencerTable data={filtered} />}
+
+          {/* Pagination */}
+          {totalPages > 1 && !loading && (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: '8px', 
+              marginTop: '2rem',
+              alignItems: 'center'
+            }}>
+              <button 
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid var(--border)',
+                  background: page === 1 ? 'var(--bg3)' : 'var(--bg2)',
+                  color: 'var(--text)',
+                  borderRadius: 'var(--radius)',
+                  cursor: page === 1 ? 'not-allowed' : 'pointer',
+                  opacity: page === 1 ? 0.5 : 1,
+                }}
+              >
+                ← Previous
+              </button>
+              
+              <span style={{ color: 'var(--text2)', fontSize: '14px' }}>
+                Page {page} of {totalPages}
+              </span>
+              
+              <button 
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page === totalPages}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid var(--border)',
+                  background: page === totalPages ? 'var(--bg3)' : 'var(--bg2)',
+                  color: 'var(--text)',
+                  borderRadius: 'var(--radius)',
+                  cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                  opacity: page === totalPages ? 0.5 : 1,
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </main>
       </div>
     </div>

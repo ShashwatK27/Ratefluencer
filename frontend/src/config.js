@@ -13,6 +13,7 @@ export const config = {
     endpoints: {
       influencers: `${API_URL}/api/influencers`,
       match: `${API_URL}/api/match`,
+      search: `${API_URL}/api/search`,
       generateContent: `${API_URL}/api/generate-content`,
       agent: `${API_URL}/api/run-agent`,
       stats: `${API_URL}/api/stats`,
@@ -21,29 +22,6 @@ export const config = {
   app: {
     name: 'Ratefluencer',
     version: '1.0.0',
-  }
-};
-
-// Helper function to make API calls with proper error handling
-export const fetchAPI = async (endpoint, options = {}) => {
-  try {
-    const response = await fetch(endpoint, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-      timeout: config.api.timeout,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    throw error;
   }
 };
 

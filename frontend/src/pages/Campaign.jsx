@@ -29,6 +29,30 @@ const BUDGET_PRESETS = [
   { label: '₹50L', value: 5000000 },
 ];
 
+// Fix #6: dynamic AI suggestion helpers
+const RELATED_CATEGORIES = {
+  Beauty:        ['Wellness', 'Fashion'],
+  Wellness:      ['Fitness', 'Beauty'],
+  Fitness:       ['Wellness', 'Food'],
+  Food:          ['Wellness', 'Travel'],
+  Tech:          ['Gaming', 'Education'],
+  Fashion:       ['Beauty', 'Travel'],
+  Travel:        ['Food', 'Fashion'],
+  Gaming:        ['Tech', 'Entertainment'],
+  Finance:       ['Tech', 'Education'],
+  Education:     ['Tech', 'Finance'],
+  Entertainment: ['Gaming', 'Travel'],
+  Pets:          ['Wellness', 'Food'],
+};
+
+const TIER_TIPS = {
+  'Brand Awareness':     'Macro creators (100K–1M) maximise reach at the lowest CPM.',
+  'Sales / Conversions': 'Micro-creators (10K–100K) show 3× higher conversion rates than mega-influencers.',
+  'Community Growth':    'Nano creators (1K–10K) drive the highest engagement per follower.',
+  'Product Launch':      'Mix Macro reach with Micro authenticity for maximum launch impact.',
+  'App Downloads':       'Tech-savvy audiences aged 18–34 deliver 4× higher app install rates.',
+};
+
 export default function Campaign({ onNavigate, onCampaignSubmit }) {
   const [form, setForm] = useState({
     name: '', brand: '', country: 'India', goal: 'Brand Awareness',
@@ -62,7 +86,7 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
 
         <div style={{ marginBottom: '3rem' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', marginBottom: '8px' }}>Create Campaign</h2>
-          <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze thousands of creators and recommend the best fit.</p>
+          <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze 50,000+ creators and recommend the best fit.</p>
         </div>
 
         {/* Basics */}
@@ -182,7 +206,24 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
           <div style={{ background: 'linear-gradient(135deg,rgba(200,240,104,0.05),rgba(104,184,240,0.05))', border: '1px solid rgba(200,240,104,0.15)', borderRadius: 'var(--radius)', padding: '1.25rem', marginTop: '1rem', display: 'flex', gap: '12px' }}>
             <span style={{ fontSize: '20px', flexShrink: 0, marginTop: '2px' }}>💡</span>
             <div style={{ fontSize: '13px', color: 'var(--text2)', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--accent)' }}>AI Suggestion:</strong> For a skincare launch targeting 25–34 urban women in India, also consider <strong style={{ color: 'var(--accent)' }}>Lifestyle</strong> and <strong style={{ color: 'var(--accent)' }}>Beauty</strong> categories. Creators with 200K–800K followers in these niches show 2.3× higher save rates than mega-influencers.
+              <strong style={{ color: 'var(--accent)' }}>AI Suggestion:</strong>{' '}
+            {(() => {
+              const primary = form.selectedCategories[0] || 'General';
+              const related = RELATED_CATEGORIES[primary] || ['Lifestyle'];
+              const suggestions = related.filter(s => !form.selectedCategories.includes(s)).slice(0, 2);
+              const tip = TIER_TIPS[form.goal] || 'A Macro + Micro creator mix balances reach and engagement.';
+              return suggestions.length > 0 ? (
+                <>For <strong style={{ color: 'var(--text)' }}>{primary}</strong> targeting <strong style={{ color: 'var(--text)' }}>{form.ageGroup}</strong>, also consider{' '}
+                  {suggestions.map((s, i) => (
+                    <React.Fragment key={s}>
+                      <strong style={{ color: 'var(--accent)' }}>{s}</strong>{i < suggestions.length - 1 ? ' and ' : ''}
+                    </React.Fragment>
+                  ))}{' '}
+                  — strong audience overlap. {tip}</>
+              ) : (
+                <>Your <strong style={{ color: 'var(--accent)' }}>{form.selectedCategories.join(' + ')}</strong> selection is well-targeted for {form.ageGroup}. {tip}</>
+              );
+            })()}
             </div>
           </div>
         </FormCard>

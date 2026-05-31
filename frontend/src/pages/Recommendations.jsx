@@ -5,27 +5,19 @@ import { recommendations, aiInsights } from '../data/index.js';
 function ScoreModal({ rec, onClose }) {
   if (!rec) return null;
   const items = [
-    { label: 'Brand Match', value: rec.brandMatch ?? 90, color: 'var(--coral)', desc: 'Semantic similarity between your campaign brief and this creator\'s content niche.' },
-    { label: 'Authenticity', value: rec.authenticity ?? 85, color: 'var(--blue)', desc: 'XGBoost fraud detector score — higher means lower fake-follower risk.' },
-    { label: 'Growth Score', value: rec.growth ?? rec.virality ?? 80, color: 'var(--gold)', desc: 'RandomForest prediction of follower & engagement trajectory over 30 days.' },
-    { label: 'Ratefluencer™', value: rec.ratefluencer, color: 'var(--accent)', desc: 'Weighted composite of all three models, calibrated to your campaign goal.' },
+    { label: 'Brand Match',    value: rec.brandMatch ?? 90,              color: 'var(--coral)', desc: "Semantic similarity between your campaign brief and this creator's content niche." },
+    { label: 'Authenticity',   value: rec.authenticity ?? 85,            color: 'var(--blue)',  desc: 'XGBoost fraud detector score — higher means lower fake-follower risk.' },
+    { label: 'Growth Score',   value: rec.growth ?? rec.virality ?? 80,  color: 'var(--gold)',  desc: 'RandomForest prediction of follower & engagement trajectory over 30 days.' },
+    { label: 'Ratefluencer™',  value: rec.ratefluencer,                  color: 'var(--accent)', desc: 'Weighted composite of all three models, calibrated to your campaign goal.' },
   ];
   return (
     <div
       onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(11,13,15,0.85)', backdropFilter: 'blur(8px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-      }}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(11,13,15,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--bg)', border: '1px solid var(--border2)',
-          borderRadius: 'var(--radius)', padding: '2rem',
-          maxWidth: '480px', width: '100%',
-        }}
+        style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 'var(--radius)', padding: '2rem', maxWidth: '480px', width: '100%' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <div>
@@ -51,11 +43,7 @@ function ScoreModal({ rec, onClose }) {
         </div>
 
         {rec.successProb && (
-          <div style={{
-            marginTop: '1.5rem', padding: '12px', borderRadius: 'var(--radius-sm)',
-            background: 'rgba(200,240,104,0.06)', border: '1px solid rgba(200,240,104,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
+          <div style={{ marginTop: '1.5rem', padding: '12px', borderRadius: 'var(--radius-sm)', background: 'rgba(200,240,104,0.06)', border: '1px solid rgba(200,240,104,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '13px', color: 'var(--text2)' }}>Predicted Campaign Success</span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--accent)' }}>{rec.successProb}</span>
           </div>
@@ -68,11 +56,7 @@ function ScoreModal({ rec, onClose }) {
 // ── Score ring ───────────────────────────────────────────────────────────────
 function ScoreRing({ score, color, offset, onClick }) {
   return (
-    <div
-      onClick={onClick}
-      title="Click to see score breakdown"
-      style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0, cursor: 'pointer' }}
-    >
+    <div onClick={onClick} title="Click to see score breakdown" style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0, cursor: 'pointer' }}>
       <svg viewBox="0 0 80 80" width="80" height="80" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
         <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
         <circle cx="40" cy="40" r="32" fill="none" stroke={color} strokeWidth="6" strokeDasharray="201" strokeDashoffset={offset} strokeLinecap="round" />
@@ -97,26 +81,21 @@ function ROIEstimator({ recos, budget }) {
     return n;
   })();
 
-  const topCreator = recos[0];
   const avgER = recos.reduce((sum, r) => sum + (parseFloat(r.engRate) || 3.5), 0) / recos.length;
-
   const estimatedFollowers = recos.reduce((sum) => sum + 250000, 0);
   const estimatedImpressions = Math.round(estimatedFollowers * (avgER / 100) * 6);
   const cpm = budgetNum > 0 ? ((budgetNum / estimatedImpressions) * 1000).toFixed(2) : '—';
-  const successPct = topCreator.successProb ? parseInt(topCreator.successProb) : 78;
+  const successPct = recos[0].successProb ? parseInt(recos[0].successProb) : 78;
 
   return (
-    <div style={{
-      background: 'var(--bg2)', border: '1px solid var(--border)',
-      borderRadius: 'var(--radius)', padding: '1.5rem', marginBottom: '1.5rem',
-    }}>
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', marginBottom: '1.5rem' }}>
       <div className="section-label" style={{ marginBottom: '12px' }}>ROI Estimator</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
         {[
-          { label: 'Est. Impressions', value: estimatedImpressions >= 1000000 ? `${(estimatedImpressions/1000000).toFixed(1)}M` : `${(estimatedImpressions/1000).toFixed(0)}K`, color: 'var(--accent)' },
-          { label: 'Avg Engagement Rate', value: `${avgER.toFixed(1)}%`, color: 'var(--blue)' },
-          { label: 'Cost Per 1K Impr.', value: `₹${cpm}`, color: 'var(--gold)' },
-          { label: 'Success Probability', value: `${successPct}%`, color: 'var(--coral)' },
+          { label: 'Est. Impressions',    value: estimatedImpressions >= 1000000 ? `${(estimatedImpressions/1000000).toFixed(1)}M` : `${(estimatedImpressions/1000).toFixed(0)}K`, color: 'var(--accent)' },
+          { label: 'Avg Engagement Rate', value: `${avgER.toFixed(1)}%`,   color: 'var(--blue)'  },
+          { label: 'Cost Per 1K Impr.',   value: `₹${cpm}`,                color: 'var(--gold)'  },
+          { label: 'Success Probability', value: `${successPct}%`,         color: 'var(--coral)' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ textAlign: 'center' }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color, lineHeight: 1 }}>{value}</div>
@@ -131,6 +110,13 @@ function ROIEstimator({ recos, budget }) {
   );
 }
 
+// ── Parse followers from meta string e.g. "500K followers" or "1.2M followers"
+function parseFollowers(meta) {
+  const m = (meta || '').match(/([\d.]+)(K|M)/);
+  if (!m) return 0;
+  return parseFloat(m[1]) * (m[2] === 'M' ? 1_000_000 : 1_000);
+}
+
 // ── Recommendation card ──────────────────────────────────────────────────────
 function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
   const rankBorder =
@@ -143,20 +129,15 @@ function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
     : 'var(--bg2)';
 
   const scoreItems = [
-    { label: 'Ratefluencer™', val: rec.ratefluencer,                                          color: 'var(--accent)' },
-    { label: 'Growth',        val: (rec.growth !== undefined ? rec.growth : rec.virality) + '%', color: 'var(--gold)'   },
-    { label: 'Authenticity',  val: (rec.authenticity ?? 85) + '%',                             color: 'var(--blue)'   },
-    { label: 'Brand Match',   val: (rec.brandMatch ?? 90) + '%',                               color: 'var(--coral)'  },
+    { label: 'Ratefluencer™', val: rec.ratefluencer,                                                  color: 'var(--accent)' },
+    { label: 'Growth',        val: (rec.growth !== undefined ? rec.growth : rec.virality) + '%',       color: 'var(--gold)'   },
+    { label: 'Authenticity',  val: (rec.authenticity !== undefined ? rec.authenticity : 85) + '%',     color: 'var(--blue)'   },
+    { label: 'Brand Match',   val: (rec.brandMatch !== undefined ? rec.brandMatch : 90) + '%',         color: 'var(--coral)'  },
   ];
 
   return (
     <div
-      style={{
-        background: rankBg, border: `1px solid ${rankBorder}`,
-        borderRadius: 'var(--radius)', padding: '1.5rem',
-        transition: 'all .2s', display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto', gap: '1.5rem', alignItems: 'center',
-      }}
+      style={{ background: rankBg, border: `1px solid ${rankBorder}`, borderRadius: 'var(--radius)', padding: '1.5rem', transition: 'all .2s', display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '1.5rem', alignItems: 'center' }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.transform = 'translateX(4px)'; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = rankBorder; e.currentTarget.style.transform = 'none'; }}
     >
@@ -186,9 +167,9 @@ function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
         <ScoreRing score={rec.ratefluencer} color={rec.ringColor} offset={rec.ringOffset} onClick={() => onShowBreakdown(rec)} />
         <button
-          className={`btn ${isShortlisted ? 'btn-ghost' : rec.rank === 1 ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+          className={`btn ${isShortlisted ? 'btn-ghost' : rec.rank === 1 ? 'btn-primary' : 'btn-ghost'} btn-sm no-print`}
           onClick={() => onShortlist(rec)}
-          style={{ fontSize: '12px', color: isShortlisted ? 'var(--accent)' : undefined }}
+          style={{ fontSize: '12px', color: isShortlisted ? 'var(--accent)' : undefined, minWidth: '90px' }}
         >
           {isShortlisted ? '✓ Shortlisted' : 'Shortlist'}
         </button>
@@ -206,21 +187,24 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
   });
   const [modalRec, setModalRec] = useState(null);
 
-  const activeRecos = recos && recos.length > 0 ? recos : recommendations;
+  const activeRecos    = recos    && recos.length    > 0 ? recos    : recommendations;
   const activeInsights = insights && insights.length > 0 ? insights : aiInsights;
 
   const avgScore = Math.round(activeRecos.reduce((s, r) => s + r.ratefluencer, 0) / activeRecos.length);
   const confInterval = Math.max(2, Math.round(10 - avgScore / 15));
 
+  const totalFollowers = activeRecos.reduce((sum, r) => sum + parseFollowers(r.meta), 0);
+  const projectedImpressions = Math.round(totalFollowers * 0.12);
+  const impStr = projectedImpressions >= 1_000_000
+    ? `~${(projectedImpressions / 1_000_000).toFixed(1)}M`
+    : projectedImpressions > 0
+      ? `~${(projectedImpressions / 1_000).toFixed(0)}K`
+      : '~2.8M';
+
   const handleShortlist = (rec) => {
     const stored = JSON.parse(localStorage.getItem('ratefluencer_shortlist') || '[]');
     const already = shortlisted.has(rec.name);
-    let updated;
-    if (already) {
-      updated = stored.filter(c => c.name !== rec.name);
-    } else {
-      updated = [...stored, rec];
-    }
+    const updated = already ? stored.filter(c => c.name !== rec.name) : [...stored, rec];
     localStorage.setItem('ratefluencer_shortlist', JSON.stringify(updated));
     setShortlisted(new Set(updated.map(c => c.name)));
   };
@@ -240,7 +224,7 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
                 <span style={{ color: 'var(--accent)' }}>{cats} · {budget} budget · India · {ageGroup}</span>
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
               <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('shortlist')}>
                 📋 View Shortlist {shortlisted.size > 0 && `(${shortlisted.size})`}
               </button>
@@ -249,17 +233,12 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
             </div>
           </div>
 
-          <div className="fade-up delay-1" style={{
-            background: 'var(--bg2)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)', padding: '1rem 1.5rem',
-            fontSize: '13px', color: 'var(--text2)', display: 'flex', gap: '2rem',
-            marginBottom: '1.5rem',
-          }}>
+          <div className="fade-up delay-1" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1rem 1.5rem', fontSize: '13px', color: 'var(--text2)', display: 'flex', gap: '2rem', marginBottom: '1.5rem' }}>
             {[
               [`${activeRecos.length} of 50,000`, 'Creators evaluated'],
-              [`${avgScore}/100`, 'Avg Ratefluencer™ Score'],
-              [budget, 'Campaign budget'],
-              ['~2.8M', 'Projected impressions'],
+              [`${avgScore}/100`,                  'Avg Ratefluencer™ Score'],
+              [budget,                             'Campaign budget'],
+              [impStr,                             'Projected impressions'],
             ].map(([val, label]) => (
               <div key={label}>
                 <strong style={{ color: 'var(--text)', display: 'block', fontSize: '15px' }}>{val}</strong>
@@ -270,10 +249,8 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
 
           <div className="divider" />
 
-          {/* ROI Estimator */}
           <ROIEstimator recos={activeRecos} budget={budget} />
 
-          {/* Cards */}
           <div className="fade-up delay-2" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '2rem' }}>
             {activeRecos.map(rec => (
               <RecoCard
@@ -286,7 +263,6 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
             ))}
           </div>
 
-          {/* AI Insights */}
           <div className="section-label" style={{ marginBottom: '12px' }}>AI Campaign Insights</div>
           <div className="fade-up delay-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '2rem' }}>
             {activeInsights.map(insight => (
@@ -298,7 +274,6 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
             ))}
           </div>
 
-          {/* Model output */}
           <div className="fade-up delay-4" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem' }}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', marginBottom: '4px', fontFamily: 'var(--font-mono)' }}>AI MODEL OUTPUT</div>
             <div style={{ fontSize: '14px', color: 'var(--text2)', lineHeight: 1.7 }}>

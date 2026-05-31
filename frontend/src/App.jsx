@@ -36,6 +36,7 @@ export default function App() {
     setCampaignMeta({
       cats: formData.selectedCategories.join(', ') || 'General',
       budget: formatBudget(formData.budget),
+      budgetRaw: formData.budget,
       ageGroup: formData.ageGroup,
     });
 
@@ -48,7 +49,11 @@ export default function App() {
         body: JSON.stringify({
           campaign_text: campaignText,
           campaign_goal: formData.goal,
-          category_filter: formData.selectedCategories.length > 0 ? formData.selectedCategories[0] : null,
+          category_filters: formData.selectedCategories,
+          min_authenticity: formData.minAuth,
+          tier_filter: formData.tier,
+          min_engagement_rate: formData.minEr,
+          excluded_brands: formData.excludedBrands,
           top_k: 3
         })
       });

@@ -126,9 +126,14 @@ class BrandMatcher:
     def _initialize(self):
         """Initialize embedding model and database using Cosine Similarity space."""
         try:
-            # Load embedding model
-            logger.info(f"Loading {self.embedding_model_name} embedding model...")
-            self.embedding_model = SentenceTransformer(self.embedding_model_name)
+            # Load embedding model — use GPU if available, otherwise CPU
+            try:
+                import torch
+                self._device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            except ImportError:
+                self._device = 'cpu'
+            logger.info(f"Loading {self.embedding_model_name} on {self._device.upper()}...")
+            self.embedding_model = SentenceTransformer(self.embedding_model_name, device=self._device)
             
             # Initialize ChromaDB
             self.chroma_client = chromadb.Client()
@@ -229,19 +234,23 @@ class BrandMatcher:
                 doc = f"Category/Niche: {category}. Bio: {bio}. Followers: {followers:,} ({tier} creator). Engagement Rate: {er:.2%}."
                 enriched_documents.append(doc)
             
-            # Generate Embeddings using Enriched Texts
-            logger.info(f"Encoding {len(enriched_documents)} enriched creator profiles...")
-            embeddings = self.embedding_model.encode(enriched_documents).tolist()
+            # Generate Embeddings — larger batch size on GPU for much faster throughput
+            encode_batch = 512 if getattr(self, '_device', 'cpu') == 'cuda' else 64
+            logger.info(f"Encoding {len(enriched_documents)} profiles (batch={encode_batch}, device={getattr(self, '_device', 'cpu').upper()})...")
+            embeddings = self.embedding_model.encode(
+                enriched_documents,
+                batch_size=encode_batch,
+                show_progress_bar=True,
+            ).tolist()
             
             # Prepare comprehensive metadatas (Chroma-compliant flat dict)
             metadatas = []
-            for idx, row in self.creators_df.iterrows():
+            for i, (_, row) in enumerate(self.creators_df.iterrows()):
                 meta = {}
                 for col in self.creators_df.columns:
                     val = row[col]
                     if pd.isna(val):
                         continue
-                    # Standardize numeric and boolean formats for ChromaDB metadatas
                     if isinstance(val, (int, np.integer)):
                         meta[col] = int(val)
                     elif isinstance(val, (float, np.floating)):
@@ -250,29 +259,31 @@ class BrandMatcher:
                         meta[col] = int(val)
                     else:
                         meta[col] = str(val)
-                
-                # Standardize keys for downstream matching code
+
                 if 'category' not in meta and 'niche' in meta:
                     meta['category'] = meta['niche']
                 if 'id' not in meta and 'creator_id' in meta:
                     meta['id'] = meta['creator_id']
                 if 'bio' not in meta:
-                    meta['bio'] = creator_bios[idx]
-                
+                    meta['bio'] = creator_bios[i]  # use positional index, not DataFrame index
+
                 metadatas.append(meta)
             
             # Insert into ChromaDB in batches (max batch size is 5461)
-            BATCH_SIZE = 5000
-            for i in range(0, len(creator_ids), BATCH_SIZE):
+            CHROMA_BATCH = 5000
+            total = len(creator_ids)
+            for start in range(0, total, CHROMA_BATCH):
+                end = min(start + CHROMA_BATCH, total)
                 self.collection.add(
-                    ids=creator_ids[i:i + BATCH_SIZE],
-                    documents=creator_bios[i:i + BATCH_SIZE],
-                    embeddings=embeddings[i:i + BATCH_SIZE],
-                    metadatas=metadatas[i:i + BATCH_SIZE],
+                    ids=creator_ids[start:end],
+                    documents=creator_bios[start:end],
+                    embeddings=embeddings[start:end],
+                    metadatas=metadatas[start:end],
                 )
-            
-            logger.info(f"Successfully loaded {len(creator_ids)} creators into Cosine RAG pipeline.")
-            return len(creator_ids)
+                logger.info(f"Indexed creators {start + 1}–{end} of {total}...")
+
+            logger.info(f"Successfully loaded {total} creators into Cosine RAG pipeline.")
+            return total
         
         except Exception as e:
             logger.error(f"Failed to load creators: {e}")
@@ -338,14 +349,11 @@ class BrandMatcher:
         score = similarity * 100.0
         return max(0.0, min(100.0, score))
     
-    def _category_bonus(self, category_a: str, category_b: str) -> float:
-        """
-        Category matching bonus (0-100 points).
-        Exact match = 100, no match = 0.
-        """
-        if category_a.lower() == category_b.lower():
+    def _category_bonus(self, category: str, category_filters: Optional[List[str]] = None) -> float:
+        """Category matching bonus: 100 if creator matches any filter, 100 for all when no filter set."""
+        if not category_filters:
             return 100.0
-        return 0.0
+        return 100.0 if any(f.lower() == category.lower() for f in category_filters) else 0.0
     
     def _engagement_score(self, followers: Optional[int], engagement_rate: Optional[float]) -> float:
         """
@@ -364,17 +372,17 @@ class BrandMatcher:
         self,
         brand_campaign: str,
         top_k: Optional[int] = None,
-        category_filter: Optional[str] = None,
+        category_filters: Optional[List[str]] = None,
         min_confidence: float = 0.4,
         campaign_goal: str = 'balanced'
     ) -> Dict:
         """
         Match a brand campaign to creators using dynamic Reranking & Ensemble scores.
-        
+
         Args:
             brand_campaign: Brand request text
             top_k: Number of results
-            category_filter: Optional category to filter by
+            category_filters: Optional list of categories to filter by (any match earns bonus)
             min_confidence: Minimum confidence threshold (0.0 - 1.0)
             campaign_goal: 'brand awareness', 'sales / conversions', 'niche targeting', 'balanced'
             
@@ -421,10 +429,7 @@ class BrandMatcher:
                 
                 # 2. Category Bonus (0-100)
                 category = metadata.get('category', 'general')
-                category_bonus = self._category_bonus(
-                    category,
-                    category_filter or category
-                )
+                category_bonus = self._category_bonus(category, category_filters)
                 
                 # 3. Traditional Engagement Score (0-100)
                 followers = metadata.get('followers', 0)
