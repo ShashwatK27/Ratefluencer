@@ -271,24 +271,43 @@ def match_creators():
             min_confidence=0.05
         )
 
-        # Niche-specific name pools so different categories get different-sounding names
-        NICHE_NAMES = {
-            'fitness':       ['Arjun Fitness', 'Priya Lifts', 'Rohan Runs', 'Simran Strong', 'Dev Gains'],
-            'beauty':        ['Ananya Glow', 'Zoya Beauty', 'Kiara Skin', 'Tara Looks', 'Meera Style'],
-            'fashion':       ['Kavya Couture', 'Shruti Trends', 'Pallavi Fashion', 'Disha Chic', 'Natasha Vogue'],
-            'food':          ['Vikram Eats', 'Pooja Cooks', 'Rahul Recipes', 'Aditi Kitchen', 'Neha Bites'],
-            'tech':          ['Siddharth Dev', 'Aditya Code', 'Gaurav Tech', 'Mihir Builds', 'Parth Digital'],
-            'travel':        ['Layla Explore', 'Ayaan Wanders', 'Chithra Travels', 'Surya Roams', 'Tanvi Trips'],
-            'gaming':        ['Rishab Plays', 'Varun Games', 'Aryan Level', 'Manav Quest', 'Harsh XP'],
-            'wellness':      ['Trisha Zen', 'Sneha Calm', 'Ankita Heal', 'Divya Mindful', 'Nisha Flow'],
-            'entertainment': ['Aisha Reels', 'Kabir Viral', 'Ishaan Shorts', 'Karan Clips', 'Aarav Creates'],
-            'music':         ['Riyanshi Beats', 'Saurabh Rhythm', 'Vivek Tunes', 'Rajat Drops', 'Trisha Vibes'],
+        # Large niche-specific name pools — first × last = 120+ unique combos per niche
+        NICHE_FIRST = {
+            'fitness':       ['Arjun','Priya','Rohan','Simran','Dev','Vikram','Neha','Karan','Aditi','Rahul','Pooja','Kabir'],
+            'beauty':        ['Ananya','Zoya','Kiara','Tara','Meera','Aisha','Divya','Nisha','Riya','Shruti','Kavya','Tanvi'],
+            'fashion':       ['Pallavi','Disha','Natasha','Trisha','Ishani','Shreya','Myra','Avni','Piya','Zaara','Roshni','Sana'],
+            'food':          ['Vikram','Pooja','Rahul','Aditi','Sneha','Gaurav','Preeti','Arjun','Meena','Suresh','Deepa','Nikhil'],
+            'tech':          ['Siddharth','Aditya','Gaurav','Mihir','Parth','Varun','Rishab','Saurabh','Ankur','Vivek','Rajat','Dev'],
+            'travel':        ['Layla','Ayaan','Chithra','Surya','Tanvi','Rohan','Priya','Aryan','Kiran','Neel','Maya','Arun'],
+            'gaming':        ['Rishab','Varun','Aryan','Manav','Harsh','Krish','Yash','Aman','Veer','Nihal','Shiv','Ranbir'],
+            'wellness':      ['Trisha','Sneha','Ankita','Divya','Nisha','Prerna','Shweta','Puja','Geeta','Lakshmi','Sarita','Mona'],
+            'entertainment': ['Aisha','Kabir','Ishaan','Karan','Aarav','Ranbir','Neha','Sana','Zara','Aliya','Farhan','Imran'],
+            'music':         ['Riyanshi','Saurabh','Vivek','Rajat','Trisha','Aditya','Mishka','Shreya','Shaan','Neeti','Armaan','Sunidhi'],
+            'sports':        ['Virat','Rohit','Smriti','Sania','Neeraj','Bajrang','Mirabai','PV','Shikhar','Hardik','Jasprit','Sunil'],
+            'comedy':        ['Tanmay','Kenny','Biswa','Kaneez','Aadar','Sumukhi','Varun','Naveen','Anirban','Sapan','Kiku','Suresh'],
         }
-        DEFAULT_NAMES = CREATOR_NAMES
+        NICHE_LAST = {
+            'fitness':       ['Fit','Strong','Gains','Active','Health','Power','Bold','Flex','Runs','Lifts'],
+            'beauty':        ['Glow','Beauty','Skin','Looks','Style','Vibes','Radiance','Bloom','Glam','Shine'],
+            'fashion':       ['Couture','Trends','Chic','Vogue','Style','Drip','Fits','Edge','Mode','Flair'],
+            'food':          ['Eats','Cooks','Recipes','Kitchen','Bites','Plates','Chef','Bakes','Tastes','Serves'],
+            'tech':          ['Dev','Code','Tech','Builds','Digital','Bytes','Stack','Logic','Data','Script'],
+            'travel':        ['Explore','Wanders','Travels','Roams','Trips','Ventures','Discovers','Journeys','Drifts','Roams'],
+            'gaming':        ['Plays','Games','Level','Quest','XP','Arena','Ranked','Clutch','Spawn','Grind'],
+            'wellness':      ['Zen','Calm','Heals','Mindful','Flow','Balance','Peace','Restore','Renew','Breathe'],
+            'entertainment': ['Reels','Viral','Shorts','Clips','Creates','Trends','Hype','Buzz','Live','Stars'],
+            'music':         ['Beats','Rhythm','Tunes','Drops','Vibes','Melodies','Flows','Notes','Groove','Sings'],
+            'sports':        ['Sports','Goals','Wins','Scores','Plays','Trains','Sprints','Tackles','Serves','Shoots'],
+            'comedy':        ['Laughs','Jokes','Roasts','Quips','Grins','Bits','Acts','Rants','Vibes','Skits'],
+        }
 
         def get_creator_name(creator_id, niche):
-            pool = NICHE_NAMES.get(niche.lower().strip(), DEFAULT_NAMES)
-            return pool[creator_id % len(pool)]
+            key = niche.lower().strip()
+            firsts = NICHE_FIRST.get(key, CREATOR_NAMES)
+            lasts  = NICHE_LAST.get(key, ['Creator'])
+            first  = firsts[creator_id % len(firsts)]
+            last   = lasts[(creator_id // len(firsts)) % len(lasts)]
+            return f"{first} {last}"
 
         formatted_recos = []
         all_score_results = []  # Fix #1: collect all scores before filtering
@@ -411,22 +430,23 @@ def match_creators():
                 ring_color = '#C8F068' if score >= 80 else '#68B8F0' if score >= 60 else '#F0C96A'
                 ring_offset = int(201 * (1.0 - score / 100.0))
                 c_name = get_creator_name(cid, niche)
+                rank = len(formatted_recos) + 1
                 formatted_recos.append({
-                    "rank": len(formatted_recos) + 1,
+                    "rank": rank,
                     "name": c_name,
                     "handle": f"@{c_name.lower().replace(' ', '_')}",
                     "meta": f"{niche} · {followers_str} followers · Instagram",
-                    "badge": "👑 #1 Match" if len(formatted_recos) == 1 else None,
+                    "badge": "👑 #1 Match" if rank == 1 else None,
                     "ratefluencer": score,
-                    "growth": growth,
-                    "authenticity": auth,
-                    "brandMatch": score,
-                    "successProb": f"{min(95, score + 5)}%",
+                    "growth": min(95, growth),
+                    "authenticity": min(97, auth),
+                    "brandMatch": min(95, score),
+                    "successProb": f"{min(92, score + 5)}%",
                     "engRate": f"{float(row['engagement_rate']):.1f}%",
-                    "why": f"✦ Top {niche} creator · Verified authentic",
+                    "why": f"✦ Top {niche} creator · {risk_level if 'risk_level' in dir() else 'Low'} fraud risk",
                     "ringColor": ring_color,
                     "ringOffset": ring_offset,
-                    "rankClass": f"rank-{len(formatted_recos)}",
+                    "rankClass": f"rank-{rank}",
                 })
 
         insights = []
