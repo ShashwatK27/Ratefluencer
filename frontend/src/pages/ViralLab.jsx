@@ -315,6 +315,26 @@ export default function ViralLab({ onNavigate }) {
                   ))}
                 </div>
 
+                {/* Predicted numbers */}
+                {scoreResult.predicted_views && (
+                  <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "16px" }}>
+                    <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "12px" }}>📊 Predicted Performance</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px" }}>
+                      {[
+                        { label: "Views",    value: scoreResult.predicted_views_str,    color: "var(--accent)" },
+                        { label: "Likes",    value: scoreResult.predicted_likes_str,    color: "var(--gold)"   },
+                        { label: "Shares",   value: scoreResult.predicted_shares_str,   color: "var(--blue)"   },
+                        { label: "Saves",    value: scoreResult.predicted_saves_str,    color: "var(--coral)"  },
+                      ].map(item => (
+                        <div key={item.label} style={{ textAlign: "center" }}>
+                          <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: item.color, lineHeight: 1 }}>{item.value}</div>
+                          <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginTop: "3px" }}>{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Tone + data source */}
                 <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
                   {scoreResult.tone && <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "rgba(176,104,240,0.08)", color: "var(--purple)", border: "1px solid rgba(176,104,240,0.2)", fontFamily: "var(--font-mono)" }}>Tone: {scoreResult.tone}</span>}
@@ -451,6 +471,26 @@ export default function ViralLab({ onNavigate }) {
                 {result.optimization_tips.map((tip, i) => (
                   <div key={i} style={{ fontSize: "12px", color: tip.startsWith("✓") ? (platform === "linkedin" ? "var(--blue)" : IG_COLOR) : "var(--text2)", marginBottom: "3px" }}>{tip}</div>
                 ))}
+              </div>
+            )}
+
+            {/* Predicted performance numbers */}
+            {result.predicted_views && (
+              <div className="fade-up" style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "12px" }}>
+                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>📊 Predicted Performance</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px" }}>
+                  {[
+                    { label: "Views",  value: result.predicted_views_str,  color: "var(--accent)" },
+                    { label: "Likes",  value: result.predicted_likes_str,  color: "var(--gold)"   },
+                    { label: "Shares", value: result.predicted_shares_str, color: "var(--blue)"   },
+                    { label: "Saves",  value: result.predicted_saves_str,  color: "var(--coral)"  },
+                  ].map(item => (
+                    <div key={item.label} style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: item.color, lineHeight: 1 }}>{item.value}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginTop: "3px" }}>{item.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

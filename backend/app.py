@@ -852,6 +852,51 @@ def creator_match():
         return jsonify({"error": str(e)}), 500
 
 
+def _virality_numbers(virality_score: int, category: str, follower_count: int = None) -> dict:
+    """
+    Predict expected views, likes, shares, saves from virality score + real Instagram benchmarks.
+    Uses average engagement data from Instagram_Analytics.csv per category.
+    """
+    # Category-level avg ER from real data (computed offline from Instagram_Analytics.csv)
+    CATEGORY_ER = {
+        'fitness': 0.0415, 'beauty': 0.0422, 'food': 0.0424, 'fashion': 0.0421,
+        'technology': 0.0420, 'travel': 0.0423, 'photography': 0.0415,
+        'lifestyle': 0.0405, 'music': 0.0420, 'comedy': 0.0420,
+    }
+    cat_er = CATEGORY_ER.get(category.lower(), 0.042)
+
+    # Use real category avg followers if not provided
+    if not follower_count:
+        df = engine.creators_df
+        cat_df = df[df['niche'].str.lower().str.contains(category.lower(), na=False)]
+        follower_count = int(cat_df['followers'].median()) if len(cat_df) > 0 else 50000
+
+    # Virality multiplier: score 0→ no boost, score 100 → 5x organic reach
+    v = virality_score / 100
+    virality_multiplier = 1 + (v ** 1.5) * 4  # ranges 1x → 5x
+
+    # Base reach = followers * engagement_rate * virality_multiplier
+    base_reach   = follower_count * cat_er * virality_multiplier
+    exp_views    = int(base_reach * 8)          # views ~8x engaged audience
+    exp_likes    = int(exp_views * cat_er * 0.7)
+    exp_comments = int(exp_views * cat_er * 0.08)
+    exp_shares   = int(exp_views * cat_er * 0.12)
+    exp_saves    = int(exp_views * cat_er * 0.18)
+
+    def fmt(n):
+        if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
+        if n >= 1_000:     return f"{n/1_000:.0f}K"
+        return str(n)
+
+    return {
+        "predicted_views":    exp_views,   "predicted_views_str":    fmt(exp_views),
+        "predicted_likes":    exp_likes,   "predicted_likes_str":    fmt(exp_likes),
+        "predicted_comments": exp_comments,"predicted_comments_str": fmt(exp_comments),
+        "predicted_shares":   exp_shares,  "predicted_shares_str":   fmt(exp_shares),
+        "predicted_saves":    exp_saves,   "predicted_saves_str":    fmt(exp_saves),
+    }
+
+
 def _parse_groq_json(raw: str) -> dict:
     """Extract and parse the first JSON object from a Groq response string."""
     import re
@@ -967,6 +1012,7 @@ Return ONLY a valid JSON object with these exact keys (no extra text):
         result['optimization_tips'] = viral_score_result.get('optimization_tips', [])
         result['best_post_time'] = f"{best_hours[0]}:00 on {best_days[0]}"
         result['data_source'] = f"Optimised using {insights.get('data_points', 3000):,} real {content_category} posts"
+        result.update(_virality_numbers(viral_score_result['viral_score'], content_category))
 
         return jsonify(result), 200
 
@@ -991,11 +1037,17 @@ def run_agent():
         logger.info(f"Running autonomous agent for goal: '{goal}'")
 
         # Step 1 — Discover trend
-        trend_prompt = f"""You are a social media trend analyst.
+        trend_prompt = f"""You are a real-time social media trend analyst monitoring Reddit, LinkedIn, YouTube, Twitter, and News platforms.
 For this campaign goal: "{goal}"
 
-Identify the single most relevant trending topic right now.
-Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentences>", "category": "<one of: Fitness, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>"}}"""
+Identify the single most relevant CURRENTLY TRENDING topic right now (as of {pd.Timestamp.now().strftime('%B %Y')}).
+Consider what's trending on: Reddit (r/entrepreneur, r/marketing, r/fitness etc), LinkedIn trending posts, YouTube Shorts trends, Google Trends, and major news.
+
+Return ONLY JSON (no other text):
+{{"trend": "<specific trending topic with context — 1-2 sentences>",
+  "source": "<where this trend is hottest: Reddit/LinkedIn/YouTube/News/TikTok>",
+  "category": "<one of: Fitness, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>",
+  "growth_signal": "<why this is trending now in 10 words>"}}"""
 
         trend_resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -1006,6 +1058,8 @@ Return ONLY JSON (no other text): {{"trend": "<trend description in 1-2 sentence
         trend_data = _parse_groq_json(trend_resp.choices[0].message.content.strip())
         trend = trend_data.get("trend", "Sustainable lifestyle content is surging across Gen-Z audiences.")
         detected_category = trend_data.get("category", "Lifestyle")
+        trend_source = trend_data.get("source", "Social Media")
+        trend_signal = trend_data.get("growth_signal", "")
 
         # Step 2 — Find best influencer using CSV data (feedback loop: skip low scores)
         df = engine.creators_df.copy()
@@ -1085,7 +1139,10 @@ Return ONLY JSON (no other text):
             "campaign_success": campaign_success,
             "best_post_time":   f"{best_hours[0]}:00 on {best_days[0]}",
             "agent_iterations": iterations,
+            "trend_source":     trend_source,
+            "trend_signal":     trend_signal,
             "data_backed":      True,
+            **_virality_numbers(virality_score, detected_category),
         }), 200
 
     except Exception as e:
@@ -1292,6 +1349,7 @@ Return ONLY valid JSON:
             "tone":                ai_data.get("tone", ""),
             "readability_score":   ai_data.get("readability_score", 70),
             "data_source":         f"Benchmarked against {insights.get('total_posts', 3000):,} real {category} posts",
+            **_virality_numbers(score_result['viral_score'], category, follower_count),
         }), 200
 
     except Exception as e:
@@ -1368,29 +1426,35 @@ def trend_ranking():
         category = data.get("category", "General")
         goal     = data.get("goal", "")
 
-        prompt = f"""You are a social media trend analyst with access to real-time signals.
-Identify 5 trending topics for the {category} category{' related to: ' + goal if goal else ''}.
+        prompt = f"""You are a real-time trend intelligence engine monitoring multiple platforms.
+As of {pd.Timestamp.now().strftime('%B %Y')}, identify 5 CURRENTLY TRENDING topics for the {category} category{' for goal: ' + goal if goal else ''}.
 
-Score each trend on 5 dimensions (0-100):
-- growth_velocity: How fast this trend is growing right now
-- engagement_potential: Expected likes/comments/shares
-- novelty: How fresh/new this topic is
-- audience_relevance: Relevance to {category} audience
-- search_interest: Current search volume interest
+Sources to consider: Reddit trending posts, LinkedIn viral content, YouTube Shorts trends,
+Google Trends, Twitter/X topics, Instagram Explore, news headlines.
+
+Score each trend using ML-style multi-factor analysis (0-100):
+- growth_velocity: Rate of growth in last 7 days across platforms
+- engagement_potential: Expected likes/comments/shares based on category benchmarks
+- novelty: How fresh/new this topic is (100=brand new, 0=oversaturated)
+- audience_relevance: Relevance to {category} audience demographics
+- search_interest: Current Google/platform search volume signals
+
+Trend score = (growth_velocity*0.3 + engagement_potential*0.25 + novelty*0.2 + audience_relevance*0.15 + search_interest*0.1)
 
 Return ONLY valid JSON:
 {{
   "trends": [
     {{
-      "topic": "<trend name>",
+      "topic": "<specific trend name>",
       "description": "<1 sentence description>",
+      "source": "<Reddit/LinkedIn/YouTube/Twitter/News>",
       "growth_velocity": <0-100>,
       "engagement_potential": <0-100>,
       "novelty": <0-100>,
       "audience_relevance": <0-100>,
       "search_interest": <0-100>,
-      "trend_score": <weighted average 0-100>,
-      "why": "<why this is trending now in 1 sentence>"
+      "trend_score": <weighted 0-100>,
+      "why": "<why trending now in 1 sentence>"
     }}
   ]
 }}"""

@@ -11,6 +11,7 @@ const AGENT_STEPS = [
 
 const IG_FIELDS = [
   { key: "trend",          icon: "🔥", label: "Trend Found" },
+  { key: "trend_source",   icon: "📡", label: "Trend Source" },
   { key: "influencer",     icon: "👤", label: "Influencer Selected" },
   { key: "reel_idea",      icon: "🎬", label: "Reel Idea" },
   { key: "caption",        icon: "📱", label: "Instagram Caption" },
@@ -226,6 +227,26 @@ export default function AIAgent({ onNavigate }) {
                     No LinkedIn content in this result. Run the agent again for fresh output.
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Predicted performance */}
+            {result.predicted_views && activeTab === "instagram" && (
+              <div style={{ marginTop: "12px", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem" }}>
+                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>📊 Predicted Campaign Performance</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px" }}>
+                  {[
+                    { label: "Views",  value: result.predicted_views_str,  color: "var(--accent)" },
+                    { label: "Likes",  value: result.predicted_likes_str,  color: "var(--gold)"   },
+                    { label: "Shares", value: result.predicted_shares_str, color: "var(--blue)"   },
+                    { label: "Saves",  value: result.predicted_saves_str,  color: "var(--coral)"  },
+                  ].map(item => (
+                    <div key={item.label} style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: item.color, lineHeight: 1 }}>{item.value}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginTop: "3px" }}>{item.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
