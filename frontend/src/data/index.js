@@ -110,12 +110,12 @@ export const sidebarNav = {
     { icon: '⭐', label: 'Results',    page: 'recommendations', iconBg: 'var(--gold-dim)'   },
   ],
   analytics: [
-    { icon: '🛡️', label: 'Authenticity',  page: null, iconBg: 'var(--coral-dim)'  },
-    { icon: '📈', label: 'Growth Engine', page: null, iconBg: 'var(--purple-dim)' },
-    { icon: '🏷️', label: 'Brand Match',   page: null, iconBg: 'var(--accent-dim)' },
+    { icon: '🛡️', label: 'Authenticity',  page: 'authenticity',  iconBg: 'var(--coral-dim)'  },
+    { icon: '📈', label: 'Growth Engine', page: 'growthEngine',  iconBg: 'var(--purple-dim)' },
+    { icon: '🏷️', label: 'Brand Match',   page: 'brandMatch',    iconBg: 'var(--accent-dim)' },
   ],
   settings: [
-    { icon: '⚙️', label: 'Preferences',  page: null, iconBg: 'rgba(255,255,255,0.05)' },
-    { icon: '🔗', label: 'Integrations', page: null, iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '📋', label: 'Shortlist',    page: 'shortlist',    iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '⚙️', label: 'Preferences', page: 'preferences',  iconBg: 'rgba(255,255,255,0.05)' },
   ],
 };

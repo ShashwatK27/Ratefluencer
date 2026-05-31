@@ -72,8 +72,8 @@ export default function Sidebar({ currentPage, onNavigate }) {
             icon={item.icon}
             label={item.label}
             iconBg={item.iconBg}
-            active={false}
-            onClick={() => {}}
+            active={currentPage === item.page}
+            onClick={() => item.page && onNavigate(item.page)}
           />
         ))}
       </SidebarSection>
@@ -85,8 +85,8 @@ export default function Sidebar({ currentPage, onNavigate }) {
             icon={item.icon}
             label={item.label}
             iconBg={item.iconBg}
-            active={false}
-            onClick={() => {}}
+            active={currentPage === item.page}
+            onClick={() => item.page && onNavigate(item.page)}
           />
         ))}
       </SidebarSection>

@@ -44,6 +44,27 @@ def home():
     return "Ratefluencer AI Model Server Running Successfully"
 
 
+@app.route("/api/stats")
+def stats():
+    """Returns live platform statistics computed from the loaded dataset."""
+    try:
+        df = engine.creators_df
+        total = len(df)
+        authentic_count = int((df['fake_account'] == 0).sum())
+        avg_er = float(df['engagement_rate'].mean())
+        top_score = int(df['growth_score'].max() * 0.5 + df['authenticity_score'].max() * 0.5)
+        return jsonify({
+            "total_influencers": total,
+            "authentic_count": authentic_count,
+            "avg_engagement_rate": round(avg_er, 2),
+            "top_score": top_score,
+            "fake_detection_rate": round((1 - authentic_count / total) * 100, 1),
+        }), 200
+    except Exception as e:
+        logger.error(f"Stats failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/influencers")
 def influencers():
     """Returns general featured influencers list (from CSV)"""

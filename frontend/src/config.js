@@ -13,6 +13,9 @@ export const config = {
     endpoints: {
       influencers: `${API_URL}/api/influencers`,
       match: `${API_URL}/api/match`,
+      generateContent: `${API_URL}/api/generate-content`,
+      agent: `${API_URL}/api/run-agent`,
+      stats: `${API_URL}/api/stats`,
     }
   },
   app: {

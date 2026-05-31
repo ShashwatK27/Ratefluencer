@@ -1,5 +1,6 @@
-import React from 'react';
-import { kpis } from '../data/index.js';
+import React, { useEffect, useState } from 'react';
+import { config } from '../config.js';
+import { kpis as fallbackKpis } from '../data/index.js';
 
 function KPICard({ label, value, delta, deltaType, icon, delay }) {
   const deltaColor =
@@ -35,7 +36,47 @@ function KPICard({ label, value, delta, deltaType, icon, delay }) {
 }
 
 export default function KPIGrid() {
+  const [kpis, setKpis] = useState(fallbackKpis);
   const delays = ['', 'delay-1', 'delay-2', 'delay-3'];
+
+  useEffect(() => {
+    fetch(config.api.endpoints.stats)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setKpis([
+          {
+            label: 'Total Influencers',
+            value: data.total_influencers.toLocaleString('en-IN'),
+            delta: `${data.authentic_count.toLocaleString('en-IN')} verified authentic`,
+            deltaType: 'up',
+            icon: '👥',
+          },
+          {
+            label: 'Avg Engagement',
+            value: `${data.avg_engagement_rate}%`,
+            delta: 'Live from dataset',
+            deltaType: 'up',
+            icon: '💬',
+          },
+          {
+            label: 'Fake Detection Rate',
+            value: `${data.fake_detection_rate}%`,
+            delta: 'Flagged by XGBoost model',
+            deltaType: 'down',
+            icon: '🛡️',
+          },
+          {
+            label: 'Top Ratefluencer™',
+            value: String(data.top_score),
+            delta: 'Best composite score',
+            deltaType: 'neutral',
+            icon: '⭐',
+          },
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { config } from "../config.js";
 
 const AGENT_STEPS = [
   { icon: "🔍", label: "Discovering Trends..." },
@@ -13,8 +14,8 @@ const RESULT_FIELDS = [
   { key: "influencer",       icon: "👤", label: "Influencer Selected" },
   { key: "reel_idea",        icon: "🎬", label: "Reel Idea" },
   { key: "caption",          icon: "📱", label: "Caption" },
-  { key: "virality_score",   icon: "🚀", label: "Virality Score",      suffix: "%" },
-  { key: "campaign_success", icon: "📈", label: "Campaign Success",    suffix: "%" },
+  { key: "virality_score",   icon: "🚀", label: "Virality Score",   suffix: "%" },
+  { key: "campaign_success", icon: "📈", label: "Campaign Success", suffix: "%" },
 ];
 
 export default function AIAgent() {
@@ -22,25 +23,25 @@ export default function AIAgent() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [error, setError] = useState(null);
 
   const runAgent = async () => {
+    if (!goal.trim()) return;
     try {
       setLoading(true);
       setResult(null);
+      setError(null);
 
       for (let i = 0; i < AGENT_STEPS.length; i++) {
         setStepIndex(i);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      const response = await axios.post(
-        "http://127.0.0.1:5000/api/run-agent",
-        { goal }
-      );
-
+      const response = await axios.post(config.api.endpoints.agent, { goal });
       setResult(response.data);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      setError("Agent run failed. Please check the backend is running and try again.");
     } finally {
       setLoading(false);
     }
@@ -85,7 +86,6 @@ export default function AIAgent() {
     <div style={{ paddingTop: "56px" }}>
       <div style={{ maxWidth: "780px", margin: "0 auto", padding: "3rem 2rem" }}>
 
-        {/* Page Header */}
         <div style={{ marginBottom: "3rem" }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>
             Autonomous AI Agent
@@ -95,7 +95,6 @@ export default function AIAgent() {
           </p>
         </div>
 
-        {/* Goal Input Card */}
         <div style={{
           background: "var(--bg2)", border: "1px solid var(--border)",
           borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem",
@@ -114,29 +113,45 @@ export default function AIAgent() {
               placeholder="e.g. Launch a skincare product for urban women aged 25–34 in India"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runAgent()}
             />
           </div>
         </div>
 
-        {/* Run Button */}
+        {error && (
+          <div style={{
+            background: "rgba(240,100,100,0.08)", border: "1px solid rgba(240,100,100,0.2)",
+            borderRadius: "var(--radius)", padding: "1rem 1.25rem",
+            color: "#F06464", fontSize: "13px", marginBottom: "1rem",
+          }}>
+            {error}
+          </div>
+        )}
+
         <button
           onClick={runAgent}
+          disabled={!goal.trim()}
           className="btn btn-primary"
           style={{
             width: "100%", padding: "16px", borderRadius: "100px",
             fontSize: "16px", fontWeight: 600, marginTop: ".5rem",
-            justifyContent: "center",
+            justifyContent: "center", opacity: goal.trim() ? 1 : 0.5,
+            cursor: goal.trim() ? "pointer" : "not-allowed",
           }}
-          onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 12px 40px rgba(200,240,104,0.3)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+          onMouseEnter={e => { if (goal.trim()) { e.currentTarget.style.boxShadow = "0 12px 40px rgba(200,240,104,0.3)"; e.currentTarget.style.transform = "translateY(-2px)"; }}}
           onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
         >
           🤖 Run Autonomous Agent
         </button>
 
-        {/* Results */}
         {result && (
           <div style={{ marginTop: "2.5rem" }}>
-            <div className="section-label" style={{ marginBottom: "12px" }}>Agent Output</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <div className="section-label">Agent Output</div>
+              <button onClick={runAgent} className="btn btn-ghost btn-sm" style={{ fontSize: "12px" }}>
+                ↻ Run Again
+              </button>
+            </div>
 
             <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {RESULT_FIELDS.map(({ key, icon, label, suffix }, i) => (

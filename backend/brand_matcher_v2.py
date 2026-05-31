@@ -261,13 +261,15 @@ class BrandMatcher:
                 
                 metadatas.append(meta)
             
-            # Insert into ChromaDB (searchable text = raw bio, embedding = enriched doc vector)
-            self.collection.add(
-                ids=creator_ids,
-                documents=creator_bios,
-                embeddings=embeddings,
-                metadatas=metadatas
-            )
+            # Insert into ChromaDB in batches (max batch size is 5461)
+            BATCH_SIZE = 5000
+            for i in range(0, len(creator_ids), BATCH_SIZE):
+                self.collection.add(
+                    ids=creator_ids[i:i + BATCH_SIZE],
+                    documents=creator_bios[i:i + BATCH_SIZE],
+                    embeddings=embeddings[i:i + BATCH_SIZE],
+                    metadatas=metadatas[i:i + BATCH_SIZE],
+                )
             
             logger.info(f"Successfully loaded {len(creator_ids)} creators into Cosine RAG pipeline.")
             return len(creator_ids)

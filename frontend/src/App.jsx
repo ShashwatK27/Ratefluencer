@@ -9,6 +9,11 @@ import Campaign from './pages/Campaign.jsx';
 import Recommendations from './pages/Recommendations.jsx';
 import ViralLab from './pages/ViralLab.jsx';
 import AIAgent from './pages/AIAgent.jsx';
+import AuthenticityPage from './pages/AuthenticityPage.jsx';
+import GrowthEnginePage from './pages/GrowthEnginePage.jsx';
+import BrandMatchPage from './pages/BrandMatchPage.jsx';
+import ShortlistPage from './pages/ShortlistPage.jsx';
+import PreferencesPage from './pages/PreferencesPage.jsx';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState('landing');
@@ -93,6 +98,21 @@ export default function App() {
       )}
       {currentPage === 'aiAgent' && (
         <AIAgent onNavigate={navigate} />
+      )}
+      {currentPage === 'authenticity' && (
+        <AuthenticityPage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'growthEngine' && (
+        <GrowthEnginePage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'brandMatch' && (
+        <BrandMatchPage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'shortlist' && (
+        <ShortlistPage currentPage={currentPage} onNavigate={navigate} />
+      )}
+      {currentPage === 'preferences' && (
+        <PreferencesPage currentPage={currentPage} onNavigate={navigate} />
       )}
 
       {loading && (
