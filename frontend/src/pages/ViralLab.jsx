@@ -175,7 +175,7 @@ export default function ViralLab({ onNavigate }) {
           ].map(p => (
             <button
               key={p.id}
-              onClick={() => { setPlatform(p.id); setResult(null); setError(null); }}
+              onClick={() => { setPlatform(p.id); setResult(null); setError(null); setTopic(""); }}
               className={`btn btn-sm ${platform === p.id ? "btn-primary" : "btn-ghost"}`}
               style={{ fontSize: "13px" }}
             >
