@@ -56,7 +56,7 @@ class RatefluencerEngine:
         }
     }
 
-    def __init__(self, creators_csv: str = 'synthetic_influencer_v2.csv'):
+    def __init__(self, creators_csv: str = 'influencers_engine_ready.csv'):
         """Initialize the Ratefluencer Engine and load all sub-models."""
         self.creators_csv = creators_csv
         self.creators_df = None
@@ -294,7 +294,7 @@ if __name__ == '__main__':
     print("="*80)
     
     # Initialize unified engine
-    engine = RatefluencerEngine(creators_csv='synthetic_influencer_v2.csv')
+    engine = RatefluencerEngine(creators_csv='influencers_engine_ready.csv')
     
     campaign = "We need an organic wellness creator to promote our plant-based vegan protein powder for healthy cooking recipes."
     

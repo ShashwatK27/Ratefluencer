@@ -73,7 +73,7 @@ FLASK_ENV=development
 FLASK_DEBUG=True
 FLASK_PORT=5000
 CORS_ORIGIN=http://localhost:5173
-CREATORS_CSV=synthetic_influencer_v2.csv
+CREATORS_CSV=influencers_engine_ready.csv
 MODEL_VERSION=v2
 LOG_LEVEL=INFO
 ```
@@ -137,7 +137,7 @@ VITE_API_URL=https://api.yourdomain.com
 
 ### CSV not loading?
 - Backend now uses absolute paths via `Path(__file__).parent`
-- Ensure `synthetic_influencer_v2.csv` exists in `backend/` folder
+- Ensure `influencers_engine_ready.csv` exists in `backend/` folder (generated from model_test.ipynb)
 - Check file permissions
 
 ---

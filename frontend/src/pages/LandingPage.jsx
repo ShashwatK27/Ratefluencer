@@ -182,7 +182,7 @@ const STEPS = [
 
 const STATS = [
   { target: 94,    suffix: '%', label: 'Authenticity Accuracy',  color: 'var(--accent)' },
-  { target: 50000, suffix: '',  label: 'Creators Analyzed',       color: 'var(--blue)'   },
+  { target: 33935, suffix: '',  label: 'Real Creators Analyzed',  color: 'var(--blue)'   },
   { target: 30000, suffix: '+', label: 'Real Posts Benchmarked',  color: 'var(--gold)'   },
 ];
 

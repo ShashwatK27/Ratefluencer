@@ -55,12 +55,12 @@ const TIER_TIPS = {
 
 export default function Campaign({ onNavigate, onCampaignSubmit }) {
   const [form, setForm] = useState({
-    name: '', brand: '', country: 'India', goal: 'Brand Awareness',
-    duration: '1 month', budget: 1000000,
-    ageGroup: '25–34', gender: 'All Genders', audience: '',
+    name: '', brand: '', goal: 'Brand Awareness',
+    budget: 1000000,
+    ageGroup: '25–34', audience: '',
     selectedCategories: ['Wellness'],
     minAuth: '75+', tier: 'Macro (100K–1M)',
-    minEr: '3%+', platform: 'Instagram',
+    minEr: '3%+',
     excludedBrands: '',
   });
 
@@ -86,7 +86,7 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
 
         <div style={{ marginBottom: '3rem' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', marginBottom: '8px' }}>Create Campaign</h2>
-          <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze 50,000+ creators and recommend the best fit.</p>
+          <p style={{ fontSize: '15px', color: 'var(--text2)' }}>Fill in the details below. Our AI will analyze 33,935 creators and recommend the best fit.</p>
         </div>
 
         {/* Basics */}
@@ -98,23 +98,9 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
             <FormGroup label="Brand / Product">
               <input type="text" value={form.brand} onChange={e => set('brand', e.target.value)} placeholder="e.g. Nykaa Glow Serum" />
             </FormGroup>
-            <FormGroup label="Target Country">
-              <select value={form.country} onChange={e => set('country', e.target.value)}>
-                <option value="India">🇮🇳 India</option>
-                <option value="USA">🇺🇸 United States</option>
-                <option value="UK">🇬🇧 United Kingdom</option>
-                <option value="UAE">🇦🇪 UAE</option>
-                <option value="Singapore">🇸🇬 Singapore</option>
-              </select>
-            </FormGroup>
-            <FormGroup label="Campaign Goal">
+            <FormGroup label="Campaign Goal" full>
               <select value={form.goal} onChange={e => set('goal', e.target.value)}>
                 {['Brand Awareness','Product Launch','Sales / Conversions','App Downloads','Community Growth'].map(g => <option key={g}>{g}</option>)}
-              </select>
-            </FormGroup>
-            <FormGroup label="Campaign Duration">
-              <select value={form.duration} onChange={e => set('duration', e.target.value)}>
-                {['1 week','2 weeks','1 month','3 months'].map(d => <option key={d}>{d}</option>)}
               </select>
             </FormGroup>
           </div>
@@ -162,12 +148,7 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
                 {['13–17','18–24','25–34','35–44','45+'].map(a => <option key={a}>{a}</option>)}
               </select>
             </FormGroup>
-            <FormGroup label="Gender Focus">
-              <select value={form.gender} onChange={e => set('gender', e.target.value)}>
-                {['All Genders','Primarily Female','Primarily Male','Non-binary inclusive'].map(g => <option key={g}>{g}</option>)}
-              </select>
-            </FormGroup>
-            <FormGroup label={<>Audience Description <span style={{ color: 'var(--text3)' }}>(helps AI refine matches)</span></>} full>
+            <FormGroup label={<>Audience Description <span style={{ color: 'var(--text3)' }}>(most impactful for AI matching)</span></>} full>
               <textarea
                 value={form.audience}
                 onChange={e => set('audience', e.target.value)}
@@ -229,9 +210,9 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
         </FormCard>
 
         {/* Advanced */}
-        <FormCard title={<>⚙️ Advanced Filters <span style={{ color: 'var(--text3)', fontSize: '11px', textTransform: 'none', fontWeight: 400, letterSpacing: 0 }}>(optional but improves recommendations)</span></>}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <FormGroup label="Minimum Authenticity Score">
+        <FormCard title={<>⚙️ Advanced Filters <span style={{ color: 'var(--text3)', fontSize: '11px', textTransform: 'none', fontWeight: 400, letterSpacing: 0 }}>(optional)</span></>}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+            <FormGroup label="Min Authenticity Score">
               <select value={form.minAuth} onChange={e => set('minAuth', e.target.value)}>
                 {['Any','60+','75+','85+','90+'].map(v => <option key={v}>{v}</option>)}
               </select>
@@ -241,14 +222,9 @@ export default function Campaign({ onNavigate, onCampaignSubmit }) {
                 {['All tiers','Nano (1K–10K)','Micro (10K–100K)','Macro (100K–1M)','Mega (1M+)'].map(v => <option key={v}>{v}</option>)}
               </select>
             </FormGroup>
-            <FormGroup label="Minimum Engagement Rate">
+            <FormGroup label="Min Engagement Rate">
               <select value={form.minEr} onChange={e => set('minEr', e.target.value)}>
                 {['Any','1%+','3%+','5%+','8%+'].map(v => <option key={v}>{v}</option>)}
-              </select>
-            </FormGroup>
-            <FormGroup label="Platform">
-              <select value={form.platform} onChange={e => set('platform', e.target.value)}>
-                {['All Platforms','Instagram','YouTube','TikTok','Twitter/X'].map(v => <option key={v}>{v}</option>)}
               </select>
             </FormGroup>
             <FormGroup label="Exclude Competitors / Blocked Brands" full>
