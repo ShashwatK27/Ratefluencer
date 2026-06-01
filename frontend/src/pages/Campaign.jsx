@@ -86,7 +86,8 @@ export default function Campaign() {
   const location  = useLocation();
   const { setCampaignMeta, setRecos, setInsights, setLastFormData, lastFormData } = useApp();
 
-  const initialForm = location.state?.initialForm || lastFormData;
+  const isFresh    = location.state?.fresh === true;
+  const initialForm = isFresh ? null : (location.state?.initialForm || lastFormData);
 
   const [step, setStep] = useState(initialForm ? 5 : 1);
   const [form, setForm] = useState(initialForm || {

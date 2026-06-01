@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
-import Sidebar from "../components/Sidebar.jsx";
 
 const CATEGORIES = ["General","Fitness","Beauty","Fashion","Technology","Food","Travel","Music","Business","Finance","Gaming","Education"];
 const DIMENSIONS = [
@@ -102,11 +101,12 @@ export default function TrendRanking() {
 
   return (
     <div style={{ paddingTop: "56px" }}>
-      <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar />
+      <div style={{ minHeight: "calc(100vh - 56px)" }}>
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
-          <div style={{ maxWidth: "860px" }}>
+          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+          <button onClick={() => navigate("/")} className="btn btn-ghost btn-sm" style={{ fontSize: "13px", marginBottom: "1.5rem" }}>← Home</button>
+          <div>
 
             <div style={{ marginBottom: "2rem" }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "28px", marginBottom: "4px" }}>Trend Ranking Engine</h2>
@@ -171,6 +171,7 @@ export default function TrendRanking() {
                 </div>
               </div>
             )}
+          </div>
           </div>
         </main>
       </div>

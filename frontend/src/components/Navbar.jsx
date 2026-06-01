@@ -1,12 +1,115 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const LINKS = [
-  { route: '/dashboard',    label: 'Dashboard'     },
-  { route: '/viral-lab',    label: 'Viral Lab'      },
-  { route: '/ai-agent',     label: 'AI Agent'       },
+  { route: '/dashboard',      label: 'Dashboard'     },
+  { route: '/viral-lab',      label: 'Viral Lab'      },
+  { route: '/ai-agent',       label: 'AI Agent'       },
   { route: '/creator-corner', label: 'Creator Corner' },
 ];
+
+const ICON_MENUS = [
+  {
+    id: 'analytics',
+    title: 'Analytics',
+    items: [
+      { route: '/authenticity',  label: 'Authenticity',  desc: 'Fraud detection scores'    },
+      { route: '/growth-engine', label: 'Growth Engine', desc: 'Growth predictions'         },
+      { route: '/brand-match',   label: 'Brand Match',   desc: 'Semantic matching'          },
+      { route: '/insights',      label: 'Real Insights', desc: 'Platform analytics'         },
+      { route: '/real-creators', label: 'Real Creators', desc: 'Top 100 global creators'    },
+    ],
+  },
+  {
+    id: 'content',
+    title: 'Content',
+    items: [
+      { route: '/content-studio',    label: 'Content Studio',    desc: 'AI reel & post creator'   },
+      { route: '/trend-ranking',     label: 'Trend Ranking',     desc: 'Trending topics'           },
+      { route: '/influencer-portal', label: 'Influencer Portal', desc: 'Creator profile & scoring' },
+    ],
+  },
+  {
+    id: 'account',
+    title: 'Account',
+    items: [
+      { route: '/shortlist',   label: 'Shortlist',   desc: 'Saved creators'    },
+      { route: '/preferences', label: 'Preferences', desc: 'Campaign settings' },
+    ],
+  },
+];
+
+function IconMenu({ menu, navigate, location }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const isActive = menu.items.some(i => i.route === location.pathname);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          height: '34px', borderRadius: '10px', padding: '0 12px',
+          display: 'flex', alignItems: 'center', gap: '6px',
+          fontSize: '13px', cursor: 'pointer', transition: 'all .15s',
+          border: open || isActive ? '1px solid rgba(200,240,104,0.35)' : '1px solid rgba(255,255,255,0.08)',
+          background: open || isActive ? 'rgba(200,240,104,0.1)' : 'rgba(255,255,255,0.04)',
+          color: open || isActive ? 'var(--accent)' : 'var(--text2)',
+          fontFamily: 'var(--font-body)',
+        }}
+        onMouseEnter={e => { if (!open && !isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = 'var(--text)'; }}}
+        onMouseLeave={e => { if (!open && !isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--text2)'; }}}
+      >
+        <span>{menu.title}</span>
+        <span style={{ fontSize: '9px', opacity: 0.5, marginLeft: '1px' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          background: 'rgba(14,16,18,0.97)', backdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '14px', padding: '8px',
+          minWidth: '220px', zIndex: 2000,
+          boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+        }}>
+          <div style={{ fontSize: '10px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.08em', padding: '4px 10px 8px' }}>
+            {menu.title}
+          </div>
+          {menu.items.map(item => {
+            const active = location.pathname === item.route;
+            return (
+              <button
+                key={item.route}
+                onClick={() => { navigate(item.route); setOpen(false); }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '8px 10px', borderRadius: '8px', cursor: 'pointer',
+                  background: active ? 'rgba(200,240,104,0.08)' : 'transparent',
+                  border: active ? '1px solid rgba(200,240,104,0.15)' : '1px solid transparent',
+                  transition: 'all .12s', textAlign: 'left', fontFamily: 'var(--font-body)',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: active ? 'var(--accent)' : 'var(--text)' }}>{item.label}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '1px' }}>{item.desc}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Navbar() {
   const navigate  = useNavigate();
@@ -86,6 +189,10 @@ export default function Navbar() {
             </button>
           );
         })}
+        <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.1)', margin: '0 6px' }} />
+        {ICON_MENUS.map(menu => (
+          <IconMenu key={menu.id} menu={menu} navigate={navigate} location={location} />
+        ))}
         <button
           className="btn btn-primary btn-sm"
           onClick={() => navigate('/campaign')}
@@ -135,6 +242,29 @@ export default function Navbar() {
               </button>
             );
           })}
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', margin: '6px 0' }} />
+          {ICON_MENUS.map(menu => (
+            <div key={menu.id}>
+              <div style={{ fontSize: '10px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.08em', padding: '8px 12px 4px' }}>
+                {menu.title}
+              </div>
+              {menu.items.map(item => (
+                <button
+                  key={item.route}
+                  onClick={() => navigate(item.route)}
+                  style={{
+                    width: '100%', padding: '8px 12px', fontSize: '13px',
+                    color: location.pathname === item.route ? 'var(--accent)' : 'var(--text)',
+                    border: 'none', background: location.pathname === item.route ? 'rgba(200,240,104,0.08)' : 'none',
+                    cursor: 'pointer', borderRadius: '8px', textAlign: 'left',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ))}
           <button
             className="btn btn-primary btn-sm"
             onClick={() => navigate('/campaign')}

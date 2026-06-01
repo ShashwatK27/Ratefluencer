@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import Sidebar from "../components/Sidebar.jsx";
 import { config } from "../config.js";
 
 const DAYS_ORDER = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
@@ -65,10 +64,10 @@ export default function InsightsPage() {
 
   return (
     <div style={{ paddingTop: "56px" }}>
-      <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar />
+      <div style={{ minHeight: "calc(100vh - 56px)" }}>
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
+          <button onClick={() => navigate("/")} className="btn btn-ghost btn-sm" style={{ fontSize: "13px", marginBottom: "1.5rem" }}>← Home</button>
           <div style={{ maxWidth: "940px" }}>
 
             <div style={{ marginBottom: "2rem" }}>

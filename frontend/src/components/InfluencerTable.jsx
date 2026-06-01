@@ -24,8 +24,14 @@ function TableHeader() {
   );
 }
 
+function formatName(raw) {
+  if (!raw) return '';
+  return raw.replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
+}
+
 function TableRow({ influencer, onClick }) {
   const { name, handle, followers, er, auth, growth, score, tier, av, c1, c2, saves_str } = influencer;
+  const displayName = formatName(name);
 
   return (
     <div
@@ -46,11 +52,11 @@ function TableRow({ influencer, onClick }) {
           fontSize: '12px', fontWeight: 600, flexShrink: 0,
           background: c1, color: c2, border: `1px solid ${c2}30`,
         }}>
-          {av}
+          {av || displayName[0] || '?'}
         </div>
         <div>
           <div style={{ fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {name}
+            {displayName}
             {influencer.real && (
               <span style={{ fontSize: '9px', background: 'rgba(200,240,104,0.08)', color: 'var(--accent)', border: '1px solid rgba(200,240,104,0.15)', padding: '1px 5px', borderRadius: '3px', fontFamily: 'var(--font-mono)' }}>
                 REAL

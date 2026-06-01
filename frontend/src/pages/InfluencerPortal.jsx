@@ -116,6 +116,7 @@ export default function InfluencerPortal() {
   return (
     <div style={{ paddingTop: '56px', minHeight: '100vh' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '3rem 2rem' }}>
+        <button onClick={() => navigate('/')} className="btn btn-ghost btn-sm" style={{ fontSize: '13px', marginBottom: '1.5rem' }}>← Home</button>
 
         {/* Header */}
         <div style={{ marginBottom: '2.5rem' }}>

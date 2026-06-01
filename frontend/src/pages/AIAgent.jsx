@@ -141,93 +141,140 @@ function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult }) {
   const prompt = videoResult?.runway_prompt || videoResult?.veo_prompt || '';
 
   return (
-    <div style={{ marginTop: "12px", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-        <div>
-          <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-            AI Video Generation
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text2)", marginTop: "2px" }}>
-            Generate storyboard, then click any service to open it with prompt pre-loaded
-          </div>
-        </div>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={runVideoGeneration}
-          disabled={videoLoading}
-          style={{ fontSize: "11px", flexShrink: 0 }}
-        >
-          {videoLoading ? "Generating..." : videoResult ? "Regenerate" : "Generate Storyboard"}
-        </button>
-      </div>
-
-      {/* Storyboard scenes */}
-      {videoResult && (
-        <div style={{ marginBottom: "12px" }}>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
-            {videoResult.scenes?.slice(0, 4).map((scene, i) => (
-              <div key={i} style={{ flex: "1 1 45%", padding: "8px 10px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: "11px" }}>
-                <div style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "9px", marginBottom: "3px" }}>
-                  Scene {scene.id} · {scene.start_sec}s-{scene.end_sec}s · {scene.shot || 'wide'}
-                </div>
-                <div style={{ color: "var(--text2)" }}>{String(scene.action || '').slice(0, 55)}</div>
-                {scene.broll_keyword && (
-                  <div style={{ color: "var(--text3)", fontSize: "10px", marginTop: "2px" }}>B-roll: {scene.broll_keyword}</div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Prompt box */}
-          {prompt && (
-            <div style={{ padding: "8px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: "10px" }}>
-              <div style={{ fontSize: "9px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "4px" }}>AI Video Prompt (auto-copied on click)</div>
-              <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.5 }}>{prompt}</div>
+    <div style={{
+      marginTop: "1.5rem",
+      borderRadius: "var(--radius)",
+      padding: "2px",
+      background: "linear-gradient(135deg, rgba(200,240,104,0.5), rgba(104,184,240,0.4), rgba(176,104,240,0.4))",
+      boxShadow: "0 0 40px rgba(200,240,104,0.12), 0 0 80px rgba(104,184,240,0.06)",
+    }}>
+      <div style={{
+        background: "linear-gradient(160deg, rgba(14,18,12,0.99), rgba(11,13,15,0.99))",
+        borderRadius: "calc(var(--radius) - 2px)",
+        padding: "1.5rem",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "1.25rem" }}>
+          <div style={{
+            width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(200,240,104,0.2), rgba(104,184,240,0.15))",
+            border: "1px solid rgba(200,240,104,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px",
+          }}>🎬</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
+              AI Video Generation
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Service launchers */}
-      <div style={{ fontSize: "11px", color: "var(--text3)", marginBottom: "8px", fontFamily: "var(--font-mono)" }}>
-        {videoResult ? "Click to copy prompt + open service:" : "Generate storyboard above first, then use any service below:"}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-        {VIDEO_SERVICES.map(svc => (
+            <div style={{ fontSize: "12px", color: "var(--text3)", marginTop: "2px" }}>
+              Generate storyboard → copy prompt → open any AI video service
+            </div>
+          </div>
           <button
-            key={svc.id}
-            onClick={() => openService(svc, prompt)}
+            onClick={runVideoGeneration}
+            disabled={videoLoading}
             style={{
-              padding: "10px 8px", borderRadius: "var(--radius-sm)", cursor: "pointer",
-              background: copied === svc.id ? svc.bg : "var(--bg)",
-              border: `1px solid ${copied === svc.id ? svc.border : "var(--border)"}`,
-              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "3px",
-              transition: "all .15s", textAlign: "left",
+              padding: "9px 18px", borderRadius: "100px", cursor: videoLoading ? "wait" : "pointer",
+              background: videoLoading ? "rgba(200,240,104,0.08)" : "rgba(200,240,104,0.12)",
+              border: "1px solid rgba(200,240,104,0.35)",
+              color: "var(--accent)", fontSize: "12px", fontWeight: 600,
+              fontFamily: "var(--font-body)", transition: "all .15s", flexShrink: 0,
+              opacity: videoLoading ? 0.6 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = svc.bg; e.currentTarget.style.borderColor = svc.border; }}
-            onMouseLeave={e => { if (copied !== svc.id) { e.currentTarget.style.background = "var(--bg)"; e.currentTarget.style.borderColor = "var(--border)"; }}}
+            onMouseEnter={e => { if (!videoLoading) e.currentTarget.style.background = "rgba(200,240,104,0.2)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(200,240,104,0.12)"; }}
           >
-            <div style={{ fontSize: "12px", fontWeight: 500, color: svc.color }}>
-              {copied === svc.id ? "Prompt copied!" : svc.label}
-            </div>
-            <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
-              {svc.free
-                ? <span style={{ color: "var(--accent)" }}>FREE - {svc.note}</span>
-                : <span style={{ color: "var(--text3)" }}>{svc.note}</span>
-              }
-            </div>
-            <div style={{ fontSize: "9px", color: "var(--text3)" }}>{svc.hint}</div>
+            {videoLoading ? "⏳ Generating..." : videoResult ? "↻ Regenerate" : "✦ Generate Storyboard"}
           </button>
-        ))}
-      </div>
-
-      {/* Toast */}
-      {toast && (
-        <div style={{ marginTop: "10px", padding: "8px 12px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--accent)" }}>
-          {toast}
         </div>
-      )}
+
+        {/* Storyboard scenes */}
+        {videoResult && (
+          <div style={{ marginBottom: "1rem" }}>
+            <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: "8px" }}>
+              Storyboard — {videoResult.scenes?.length || 0} scenes
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+              {videoResult.scenes?.slice(0, 4).map((scene, i) => (
+                <div key={i} style={{
+                  padding: "10px 12px", background: "rgba(200,240,104,0.04)",
+                  border: "1px solid rgba(200,240,104,0.12)", borderRadius: "8px", fontSize: "11px",
+                }}>
+                  <div style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "9px", marginBottom: "4px", textTransform: "uppercase" }}>
+                    Scene {scene.id} · {scene.start_sec}s–{scene.end_sec}s · {scene.shot || 'wide'}
+                  </div>
+                  <div style={{ color: "var(--text2)", lineHeight: 1.5 }}>{String(scene.action || '').slice(0, 60)}</div>
+                  {scene.broll_keyword && (
+                    <div style={{ color: "var(--text3)", fontSize: "10px", marginTop: "4px" }}>🎬 {scene.broll_keyword}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Prompt box */}
+            {prompt && (
+              <div style={{
+                padding: "10px 14px", background: "rgba(104,184,240,0.05)",
+                border: "1px solid rgba(104,184,240,0.2)", borderRadius: "8px", marginBottom: "12px",
+              }}>
+                <div style={{ fontSize: "9px", color: "var(--blue)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "5px" }}>
+                  Video Prompt — auto-copied when you click a service
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.6 }}>{prompt}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Instruction label */}
+        <div style={{ fontSize: "11px", color: "var(--text3)", marginBottom: "10px", fontFamily: "var(--font-mono)" }}>
+          {videoResult ? "↓ Click any platform — prompt is auto-copied to clipboard" : "↑ Generate storyboard first, then launch any platform below"}
+        </div>
+
+        {/* Service grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
+          {VIDEO_SERVICES.map(svc => (
+            <button
+              key={svc.id}
+              onClick={() => openService(svc, prompt)}
+              style={{
+                padding: "12px 6px", borderRadius: "10px", cursor: "pointer",
+                background: copied === svc.id ? svc.bg : "rgba(255,255,255,0.03)",
+                border: `1px solid ${copied === svc.id ? svc.border : "rgba(255,255,255,0.07)"}`,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+                transition: "all .15s", textAlign: "center",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = svc.bg;
+                e.currentTarget.style.borderColor = svc.border;
+                e.currentTarget.style.transform = "translateY(-2px)";
+              }}
+              onMouseLeave={e => {
+                if (copied !== svc.id) {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+                }
+                e.currentTarget.style.transform = "none";
+              }}
+            >
+              <div style={{ fontSize: "12px", fontWeight: 600, color: copied === svc.id ? svc.color : "var(--text)" }}>
+                {copied === svc.id ? "✓ Copied!" : svc.label}
+              </div>
+              <div style={{ fontSize: "9px", fontFamily: "var(--font-mono)" }}>
+                {svc.free
+                  ? <span style={{ color: "var(--accent)" }}>{svc.note}</span>
+                  : <span style={{ color: "var(--text3)" }}>{svc.note}</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Toast */}
+        {toast && (
+          <div style={{ marginTop: "10px", padding: "8px 12px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--accent)" }}>
+            {toast}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -240,33 +287,8 @@ export default function AIAgent() {
   const [stepIndex,   setStepIndex]   = useState(0);
   const [error,       setError]       = useState(null);
   const [activeTab,   setActiveTab]   = useState("instagram");
-  const [learnResult, setLearnResult] = useState(null);
-  const [learningActive, setLearningActive] = useState(false);
-  const [prefs,       setPrefs]       = useState(null);
   const [videoResult, setVideoResult] = useState(null);
   const [videoLoading, setVideoLoading] = useState(false);
-
-  // Load persisted preferences on mount
-  useEffect(() => {
-    fetch(config.api.endpoints.agentPreferences)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.has_preferences) setPrefs(d.preferences); })
-      .catch(() => {});
-  }, []);
-
-  const runLearn = async () => {
-    setLearningActive(true);
-    try {
-      const r = await fetch(config.api.endpoints.agentLearn, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: result?.category || '' }),
-      });
-      const d = await r.json();
-      setLearnResult(d);
-      if (d.learned) setPrefs(d.preferences);
-    } catch (e) { console.warn(e); }
-    finally { setLearningActive(false); }
-  };
 
   const runVideoGeneration = async () => {
     if (!result) return;
@@ -522,57 +544,6 @@ export default function AIAgent() {
             )}
 
             <FeedbackBar result={result} />
-
-            {/* -- Learning Loop Card -- */}
-            <div style={{ marginTop: "12px", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
-                  Continuous Learning Loop
-                </div>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={runLearn}
-                  disabled={learningActive}
-                  style={{ fontSize: "11px" }}
-                >
-                  {learningActive ? "Learning..." : "Learn from Feedback"}
-                </button>
-              </div>
-              {prefs && prefs.upvoted_count >= 2 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <div style={{ fontSize: "12px", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
-                    Active — learned from {prefs.upvoted_count} upvotes (confidence {prefs.confidence}%)
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {[
-                      { label: "Tone", val: prefs.detected_tone },
-                      { label: "Hashtags", val: `~${prefs.avg_hashtags}` },
-                      { label: "Avg virality", val: prefs.avg_virality },
-                    ].map(p => (
-                      <span key={p.label} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "20px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
-                        {p.label}: {p.val}
-                      </span>
-                    ))}
-                  </div>
-                  {prefs.preferred_words?.length > 0 && (
-                    <div style={{ fontSize: "11px", color: "var(--text3)" }}>
-                      Preferred words: {prefs.preferred_words.slice(0,5).join(", ")}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize: "12px", color: "var(--text3)", lineHeight: 1.6 }}>
-                  Rate content with thumbs up/down in Viral Lab, then click "Learn from Feedback"
-                  to activate the improvement loop. The agent will automatically apply your preferences
-                  in the next {`{MAX_CONTENT_ITERS}`} iterations.
-                </div>
-              )}
-              {learnResult?.learned && (
-                <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--accent)", padding: "8px 12px", background: "rgba(200,240,104,0.06)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(200,240,104,0.15)" }}>
-                  {learnResult.message}
-                </div>
-              )}
-            </div>
 
             {/* -- Video Generation Card -- */}
             <VideoGeneratorCard

@@ -41,6 +41,7 @@ import base64
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import joblib
+import sqlite3
 
 try:
     import shap as _shap
@@ -339,27 +340,158 @@ logger.info(f"Dataset size: {len(engine.creators_df)} creators")
 _rf_scorer = _RatefluencerScorer()
 _init_tfidf()
 
-# -- Campaign store -----------------------------------------------------------
-campaigns_store = []
+# -- Campaign database --------------------------------------------------------
+DB_PATH = BACKEND_DIR / 'campaigns.db'
 
 DEMO_CAMPAIGNS = [
-    {"id": "demo_1", "name": "Diwali Skincare Launch", "brand": "Nykaa", "goal": "Brand Awareness",
-     "category_filters": ["Beauty","Wellness"], "campaign_text": "Skincare beauty wellness glow serum organic India women",
-     "budget": 1000000, "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T10:00:00"},
-    {"id": "demo_2", "name": "Protein Supplement Campaign", "brand": "MuscleBlaze", "goal": "Sales / Conversions",
-     "category_filters": ["Fitness"], "campaign_text": "Fitness gym workout protein supplement muscle strength training",
-     "budget": 500000, "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T11:00:00"},
-    {"id": "demo_3", "name": "Food Delivery App Launch", "brand": "Swiggy", "goal": "App Downloads",
-     "category_filters": ["Food","Lifestyle"], "campaign_text": "Food delivery restaurant healthy meal cooking recipe India",
-     "budget": 750000, "ageGroup": "18-30", "country": "India", "timestamp": "2026-06-01T12:00:00"},
-    {"id": "demo_4", "name": "Tech Gadget Unboxing", "brand": "OnePlus", "goal": "Product Launch",
-     "category_filters": ["Tech","Gaming"], "campaign_text": "Technology gadget smartphone unboxing review tech product",
-     "budget": 2000000, "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T13:00:00"},
-    {"id": "demo_5", "name": "Travel Booking Campaign", "brand": "MakeMyTrip", "goal": "Brand Awareness",
-     "category_filters": ["Travel","Photography"], "campaign_text": "Travel adventure tourism destination photography explore India",
-     "budget": 1500000, "ageGroup": "25-44", "country": "India", "timestamp": "2026-06-01T14:00:00"},
+    # Beauty & Skincare
+    {"id": "demo_1",  "name": "Diwali Skincare Launch",         "brand": "Nykaa",           "goal": "Brand Awareness",     "category_filters": ["Beauty","Wellness"],      "campaign_text": "Skincare beauty wellness glow serum organic India women",                         "budget": 1000000,  "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T10:00:00"},
+    {"id": "demo_2",  "name": "Summer Glow Kit",                "brand": "Mamaearth",        "goal": "Sales / Conversions", "category_filters": ["Beauty"],                 "campaign_text": "Natural skincare organic beauty glow kit summer India women self-care",          "budget": 800000,   "ageGroup": "18-30", "country": "India", "timestamp": "2026-06-01T10:30:00"},
+    {"id": "demo_3",  "name": "Men's Grooming Range",           "brand": "Beardo",           "goal": "Product Launch",      "category_filters": ["Beauty","Fitness"],       "campaign_text": "Men grooming beard skincare hair styling product launch India",                  "budget": 600000,   "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-01T11:00:00"},
+    {"id": "demo_4",  "name": "Luxury Perfume Collection",      "brand": "Forest Essentials", "goal": "Brand Awareness",    "category_filters": ["Beauty","Lifestyle"],     "campaign_text": "Luxury perfume fragrance Ayurvedic beauty wellness India premium",             "budget": 2500000,  "ageGroup": "25-44", "country": "India", "timestamp": "2026-06-01T11:30:00"},
+    {"id": "demo_5",  "name": "Hair Care Revolution",           "brand": "Wow Skin Science", "goal": "Sales / Conversions", "category_filters": ["Beauty","Wellness"],      "campaign_text": "Hair care shampoo conditioner growth natural organic beauty India",             "budget": 700000,   "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-01T12:00:00"},
+    # Fitness & Health
+    {"id": "demo_6",  "name": "Protein Supplement Campaign",    "brand": "MuscleBlaze",      "goal": "Sales / Conversions", "category_filters": ["Fitness"],                "campaign_text": "Fitness gym workout protein supplement muscle strength training",               "budget": 500000,   "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T12:30:00"},
+    {"id": "demo_7",  "name": "Yoga Mat & Accessories",         "brand": "Boldfit",          "goal": "Product Launch",      "category_filters": ["Fitness","Wellness"],     "campaign_text": "Yoga fitness wellness mat accessories home workout India health",               "budget": 400000,   "ageGroup": "22-40", "country": "India", "timestamp": "2026-06-01T13:00:00"},
+    {"id": "demo_8",  "name": "Smartwatch Fitness Edition",     "brand": "Noise",            "goal": "Product Launch",      "category_filters": ["Fitness","Tech"],         "campaign_text": "Smartwatch fitness tracker health monitor wearable tech India",                 "budget": 1500000,  "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-01T13:30:00"},
+    {"id": "demo_9",  "name": "Health Drink for Athletes",      "brand": "Gatorade",         "goal": "Brand Awareness",     "category_filters": ["Fitness","Food"],         "campaign_text": "Sports drink energy hydration athlete fitness performance India",               "budget": 3000000,  "ageGroup": "16-30", "country": "India", "timestamp": "2026-06-01T14:00:00"},
+    {"id": "demo_10", "name": "Cycling Gear Campaign",          "brand": "Firefox Bikes",    "goal": "Community Growth",    "category_filters": ["Fitness","Travel"],       "campaign_text": "Cycling bike fitness outdoor adventure gear India community sport",             "budget": 350000,   "ageGroup": "18-40", "country": "India", "timestamp": "2026-06-01T14:30:00"},
+    # Food & Beverage
+    {"id": "demo_11", "name": "Food Delivery App Launch",       "brand": "Swiggy",           "goal": "App Downloads",       "category_filters": ["Food","Lifestyle"],       "campaign_text": "Food delivery restaurant healthy meal cooking recipe India",                   "budget": 750000,   "ageGroup": "18-30", "country": "India", "timestamp": "2026-06-01T15:00:00"},
+    {"id": "demo_12", "name": "Premium Coffee Experience",      "brand": "Blue Tokai",       "goal": "Brand Awareness",     "category_filters": ["Food","Lifestyle"],       "campaign_text": "Specialty coffee premium artisan brew cafe culture India lifestyle",            "budget": 400000,   "ageGroup": "22-40", "country": "India", "timestamp": "2026-06-01T15:30:00"},
+    {"id": "demo_13", "name": "Healthy Snack Range",            "brand": "Yoga Bar",         "goal": "Sales / Conversions", "category_filters": ["Food","Fitness","Wellness"],"campaign_text": "Healthy snack protein bar nutrition wellness diet food India",                 "budget": 500000,   "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-01T16:00:00"},
+    {"id": "demo_14", "name": "Cloud Kitchen Launch",           "brand": "Rebel Foods",      "goal": "Brand Awareness",     "category_filters": ["Food"],                   "campaign_text": "Cloud kitchen food brand delivery multiple cuisines India online ordering",     "budget": 900000,   "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T16:30:00"},
+    {"id": "demo_15", "name": "Organic Juice Cleanse",          "brand": "Raw Pressery",     "goal": "Product Launch",      "category_filters": ["Food","Wellness"],        "campaign_text": "Organic cold press juice cleanse detox health wellness India",                  "budget": 300000,   "ageGroup": "22-40", "country": "India", "timestamp": "2026-06-01T17:00:00"},
+    # Fashion & Lifestyle
+    {"id": "demo_16", "name": "Ethnic Wear Festive Season",     "brand": "Manyavar",         "goal": "Brand Awareness",     "category_filters": ["Fashion"],                "campaign_text": "Ethnic wear traditional Indian fashion festive wedding kurta sherwani",        "budget": 5000000,  "ageGroup": "18-45", "country": "India", "timestamp": "2026-06-01T17:30:00"},
+    {"id": "demo_17", "name": "Streetwear Collection Drop",     "brand": "Bewakoof",         "goal": "Product Launch",      "category_filters": ["Fashion","Entertainment"],"campaign_text": "Streetwear urban fashion youth culture India drop collection style",            "budget": 600000,   "ageGroup": "16-28", "country": "India", "timestamp": "2026-06-01T18:00:00"},
+    {"id": "demo_18", "name": "Sustainable Fashion Campaign",   "brand": "No Nasties",       "goal": "Community Growth",    "category_filters": ["Fashion","Wellness"],     "campaign_text": "Sustainable eco-friendly fashion organic cotton ethical clothing India",       "budget": 350000,   "ageGroup": "22-40", "country": "India", "timestamp": "2026-06-01T18:30:00"},
+    {"id": "demo_19", "name": "Luxury Handbag Launch",          "brand": "Hidesign",         "goal": "Product Launch",      "category_filters": ["Fashion","Lifestyle"],    "campaign_text": "Luxury leather handbag accessories premium fashion India lifestyle",           "budget": 1200000,  "ageGroup": "25-45", "country": "India", "timestamp": "2026-06-01T19:00:00"},
+    {"id": "demo_20", "name": "Sports Apparel Line",            "brand": "Puma India",       "goal": "Brand Awareness",     "category_filters": ["Fashion","Fitness"],      "campaign_text": "Sports apparel activewear running fitness training shoes India performance",    "budget": 4000000,  "ageGroup": "16-34", "country": "India", "timestamp": "2026-06-01T19:30:00"},
+    # Tech & Gaming
+    {"id": "demo_21", "name": "Tech Gadget Unboxing",           "brand": "OnePlus",          "goal": "Product Launch",      "category_filters": ["Tech","Gaming"],          "campaign_text": "Technology gadget smartphone unboxing review tech product",                    "budget": 2000000,  "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T20:00:00"},
+    {"id": "demo_22", "name": "Gaming Laptop Launch",           "brand": "Asus ROG",         "goal": "Product Launch",      "category_filters": ["Gaming","Tech"],          "campaign_text": "Gaming laptop high performance esports India gamer tech review",               "budget": 2500000,  "ageGroup": "16-30", "country": "India", "timestamp": "2026-06-01T20:30:00"},
+    {"id": "demo_23", "name": "Truly Wireless Earbuds",         "brand": "boAt",             "goal": "Sales / Conversions", "category_filters": ["Tech","Music"],           "campaign_text": "Wireless earbuds audio music TWS earphones India youth lifestyle tech",        "budget": 1800000,  "ageGroup": "16-30", "country": "India", "timestamp": "2026-06-01T21:00:00"},
+    {"id": "demo_24", "name": "EdTech Platform Launch",         "brand": "Unacademy",        "goal": "App Downloads",       "category_filters": ["Education","Tech"],       "campaign_text": "Online learning edtech education platform India students exams courses",       "budget": 3000000,  "ageGroup": "16-28", "country": "India", "timestamp": "2026-06-01T21:30:00"},
+    {"id": "demo_25", "name": "Gaming Peripherals Campaign",    "brand": "Logitech India",   "goal": "Brand Awareness",     "category_filters": ["Gaming","Tech"],          "campaign_text": "Gaming mouse keyboard headset peripherals esports India setup",                "budget": 1000000,  "ageGroup": "16-28", "country": "India", "timestamp": "2026-06-01T22:00:00"},
+    # Travel & Hospitality
+    {"id": "demo_26", "name": "Travel Booking Campaign",        "brand": "MakeMyTrip",       "goal": "Brand Awareness",     "category_filters": ["Travel","Photography"],   "campaign_text": "Travel adventure tourism destination photography explore India",               "budget": 1500000,  "ageGroup": "25-44", "country": "India", "timestamp": "2026-06-02T09:00:00"},
+    {"id": "demo_27", "name": "Budget Hotel Discovery",         "brand": "OYO",              "goal": "App Downloads",       "category_filters": ["Travel","Lifestyle"],     "campaign_text": "Budget hotel affordable stay travel India staycation weekend getaway",         "budget": 2000000,  "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-02T09:30:00"},
+    {"id": "demo_28", "name": "Luxury Resort Campaign",         "brand": "Taj Hotels",       "goal": "Brand Awareness",     "category_filters": ["Travel","Lifestyle"],     "campaign_text": "Luxury hotel resort travel India wellness spa fine dining premium",            "budget": 5000000,  "ageGroup": "30-55", "country": "India", "timestamp": "2026-06-02T10:00:00"},
+    {"id": "demo_29", "name": "Backpacker Travel Gear",         "brand": "Wildcraft",        "goal": "Product Launch",      "category_filters": ["Travel","Fitness"],       "campaign_text": "Backpack travel outdoor adventure trekking gear India camping mountain",       "budget": 500000,   "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-02T10:30:00"},
+    {"id": "demo_30", "name": "International Flight Deals",     "brand": "IndiGo",           "goal": "Sales / Conversions", "category_filters": ["Travel"],                 "campaign_text": "Flight airline travel deals international domestic India low cost booking",    "budget": 4000000,  "ageGroup": "22-45", "country": "India", "timestamp": "2026-06-02T11:00:00"},
+    # Finance & Fintech
+    {"id": "demo_31", "name": "Digital Payments App",           "brand": "PhonePe",          "goal": "App Downloads",       "category_filters": ["Finance","Tech"],         "campaign_text": "Digital payment UPI fintech money transfer India cashless mobile wallet",      "budget": 5000000,  "ageGroup": "18-40", "country": "India", "timestamp": "2026-06-02T11:30:00"},
+    {"id": "demo_32", "name": "Mutual Fund Investment",         "brand": "Groww",            "goal": "Community Growth",    "category_filters": ["Finance","Education"],    "campaign_text": "Mutual fund investment stock market finance India millennial wealth",           "budget": 2000000,  "ageGroup": "22-40", "country": "India", "timestamp": "2026-06-02T12:00:00"},
+    {"id": "demo_33", "name": "Credit Card Launch",             "brand": "HDFC Bank",        "goal": "Product Launch",      "category_filters": ["Finance","Lifestyle"],    "campaign_text": "Credit card rewards cashback premium banking lifestyle India",                  "budget": 3000000,  "ageGroup": "25-45", "country": "India", "timestamp": "2026-06-02T12:30:00"},
+    {"id": "demo_34", "name": "Crypto Trading Platform",        "brand": "CoinDCX",          "goal": "App Downloads",       "category_filters": ["Finance","Tech"],         "campaign_text": "Cryptocurrency bitcoin trading investment blockchain India fintech youth",      "budget": 1500000,  "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-02T13:00:00"},
+    {"id": "demo_35", "name": "Term Insurance Awareness",       "brand": "PolicyBazaar",     "goal": "Brand Awareness",     "category_filters": ["Finance","Education"],    "campaign_text": "Life insurance term plan financial planning India family protection wealth",   "budget": 2500000,  "ageGroup": "25-45", "country": "India", "timestamp": "2026-06-02T13:30:00"},
+    # Entertainment & Media
+    {"id": "demo_36", "name": "OTT Platform Subscription",      "brand": "Disney+ Hotstar",  "goal": "App Downloads",       "category_filters": ["Entertainment","Lifestyle"],"campaign_text": "OTT streaming movies web series sports cricket India entertainment",           "budget": 4000000,  "ageGroup": "16-40", "country": "India", "timestamp": "2026-06-02T14:00:00"},
+    {"id": "demo_37", "name": "Music Streaming Campaign",        "brand": "JioSaavn",         "goal": "App Downloads",       "category_filters": ["Music","Entertainment"],  "campaign_text": "Music streaming Hindi Bollywood playlist India artists discovery",             "budget": 1500000,  "ageGroup": "16-35", "country": "India", "timestamp": "2026-06-02T14:30:00"},
+    {"id": "demo_38", "name": "Comedy Show Promotion",           "brand": "Netflix India",    "goal": "Brand Awareness",     "category_filters": ["Entertainment","Comedy"], "campaign_text": "Comedy show Netflix India original series entertainment binge watch",          "budget": 3000000,  "ageGroup": "18-35", "country": "India", "timestamp": "2026-06-02T15:00:00"},
+    {"id": "demo_39", "name": "Podcast Platform Launch",         "brand": "Hubhopper",        "goal": "Community Growth",    "category_filters": ["Education","Entertainment"],"campaign_text": "Podcast audio content India creator education entertainment storytelling",     "budget": 300000,   "ageGroup": "18-40", "country": "India", "timestamp": "2026-06-02T15:30:00"},
+    {"id": "demo_40", "name": "Gaming Tournament Sponsorship",   "brand": "MPL",              "goal": "Community Growth",    "category_filters": ["Gaming","Entertainment"], "campaign_text": "Mobile gaming tournament esports India skill money prize fantasy sport",       "budget": 2000000,  "ageGroup": "16-30", "country": "India", "timestamp": "2026-06-02T16:00:00"},
+    # Home & Interior
+    {"id": "demo_41", "name": "Smart Home Devices",              "brand": "Philips India",    "goal": "Product Launch",      "category_filters": ["Tech","Interior"],        "campaign_text": "Smart home automation lighting device India interior design lifestyle",        "budget": 1000000,  "ageGroup": "25-45", "country": "India", "timestamp": "2026-06-02T16:30:00"},
+    {"id": "demo_42", "name": "Premium Furniture Range",         "brand": "Pepperfry",        "goal": "Brand Awareness",     "category_filters": ["Interior","Lifestyle"],   "campaign_text": "Home furniture interior design decor premium India living room bedroom",       "budget": 1500000,  "ageGroup": "25-45", "country": "India", "timestamp": "2026-06-02T17:00:00"},
+    {"id": "demo_43", "name": "Air Purifier Campaign",           "brand": "Dyson India",      "goal": "Product Launch",      "category_filters": ["Interior","Wellness"],    "campaign_text": "Air purifier clean air pollution wellness home India premium appliance",       "budget": 2000000,  "ageGroup": "28-50", "country": "India", "timestamp": "2026-06-02T17:30:00"},
+    # Pets & Family
+    {"id": "demo_44", "name": "Premium Pet Food Launch",         "brand": "Drools",           "goal": "Product Launch",      "category_filters": ["Pets","Wellness"],        "campaign_text": "Pet food dog cat nutrition premium health India pet parent care",              "budget": 400000,   "ageGroup": "22-40", "country": "India", "timestamp": "2026-06-02T18:00:00"},
+    {"id": "demo_45", "name": "Baby Care Essentials",            "brand": "Mee Mee",          "goal": "Brand Awareness",     "category_filters": ["Family","Wellness"],      "campaign_text": "Baby care products mother infant child wellness safety India parenting",       "budget": 600000,   "ageGroup": "22-35", "country": "India", "timestamp": "2026-06-02T18:30:00"},
+    # Education
+    {"id": "demo_46", "name": "Coding Bootcamp for Kids",        "brand": "WhiteHat Jr",      "goal": "App Downloads",       "category_filters": ["Education","Tech"],       "campaign_text": "Kids coding programming education online learning India school STEM",          "budget": 1500000,  "ageGroup": "25-40", "country": "India", "timestamp": "2026-06-02T19:00:00"},
+    {"id": "demo_47", "name": "Language Learning App",           "brand": "Duolingo India",   "goal": "App Downloads",       "category_filters": ["Education","Lifestyle"],  "campaign_text": "Language learning English Spanish app India skill education career",           "budget": 2000000,  "ageGroup": "16-35", "country": "India", "timestamp": "2026-06-02T19:30:00"},
+    # Automobiles
+    {"id": "demo_48", "name": "Electric Scooter Launch",         "brand": "Ola Electric",     "goal": "Product Launch",      "category_filters": ["Tech","Lifestyle"],       "campaign_text": "Electric scooter EV sustainable transport India urban commute green",          "budget": 5000000,  "ageGroup": "18-40", "country": "India", "timestamp": "2026-06-02T20:00:00"},
+    {"id": "demo_49", "name": "Car Insurance Campaign",          "brand": "Acko",             "goal": "App Downloads",       "category_filters": ["Finance","Tech"],         "campaign_text": "Car insurance digital auto policy India vehicle coverage online claim",        "budget": 1500000,  "ageGroup": "22-45", "country": "India", "timestamp": "2026-06-02T20:30:00"},
+    # Creator Economy
+    {"id": "demo_50", "name": "Creator Fund India",              "brand": "Instagram India",  "goal": "Community Growth",    "category_filters": ["Lifestyle","Entertainment","Fashion","Fitness","Beauty"],
+     "campaign_text": "Creator content creator economy Instagram India reels viral social media influencer",
+     "budget": 10000000, "ageGroup": "16-35", "country": "India", "timestamp": "2026-06-02T21:00:00"},
 ]
-campaigns_store.extend(DEMO_CAMPAIGNS)
+
+def _db_conn():
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_campaigns_db():
+    with _db_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS campaigns (
+                id              TEXT PRIMARY KEY,
+                name            TEXT,
+                brand           TEXT,
+                goal            TEXT,
+                category_filters TEXT,
+                campaign_text   TEXT UNIQUE,
+                budget          INTEGER,
+                age_group       TEXT,
+                country         TEXT,
+                timestamp       TEXT
+            )
+        """)
+        conn.commit()
+        # Always sync all demo campaigns (INSERT OR IGNORE keeps live campaigns intact)
+        for c in DEMO_CAMPAIGNS:
+            conn.execute(
+                "INSERT OR IGNORE INTO campaigns VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (c["id"], c["name"], c["brand"], c["goal"],
+                 json.dumps(c["category_filters"]), c["campaign_text"],
+                 c["budget"], c.get("ageGroup","18-34"), c.get("country","India"), c["timestamp"])
+            )
+        conn.commit()
+        total = conn.execute("SELECT COUNT(*) FROM campaigns").fetchone()[0]
+        logger.info(f"Campaigns DB ready — {total} campaigns ({len(DEMO_CAMPAIGNS)} demo + live)")
+
+def db_get_campaigns():
+    with _db_conn() as conn:
+        rows = conn.execute("SELECT * FROM campaigns ORDER BY timestamp DESC").fetchall()
+    result = []
+    for r in rows:
+        result.append({
+            "id": r["id"], "name": r["name"], "brand": r["brand"], "goal": r["goal"],
+            "category_filters": json.loads(r["category_filters"] or "[]"),
+            "campaign_text": r["campaign_text"], "budget": r["budget"],
+            "ageGroup": r["age_group"], "country": r["country"], "timestamp": r["timestamp"],
+        })
+    return result
+
+def db_add_campaign(entry):
+    try:
+        with _db_conn() as conn:
+            # Keep max 50 live campaigns (never delete demo_ rows)
+            live_count = conn.execute("SELECT COUNT(*) FROM campaigns WHERE id LIKE 'live_%'").fetchone()[0]
+            if live_count >= 45:
+                oldest = conn.execute(
+                    "SELECT id FROM campaigns WHERE id LIKE 'live_%' ORDER BY timestamp ASC LIMIT 5"
+                ).fetchall()
+                for row in oldest:
+                    conn.execute("DELETE FROM campaigns WHERE id=?", (row["id"],))
+            conn.execute(
+                "INSERT OR IGNORE INTO campaigns VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (entry["id"], entry["name"], entry["brand"], entry["goal"],
+                 json.dumps(entry.get("category_filters", [])), entry["campaign_text"],
+                 entry["budget"], entry.get("ageGroup","18-34"), entry.get("country","India"),
+                 entry["timestamp"])
+            )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"db_add_campaign failed: {e}")
+
+def db_campaign_exists(campaign_text):
+    with _db_conn() as conn:
+        return conn.execute(
+            "SELECT 1 FROM campaigns WHERE campaign_text=?", (campaign_text,)
+        ).fetchone() is not None
+
+def db_next_live_id():
+    with _db_conn() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM campaigns WHERE id LIKE 'live_%'").fetchone()[0]
+    return f"live_{count + 1}"
+
+init_campaigns_db()
 
 
 # -- Utility helpers ----------------------------------------------------------
@@ -1092,7 +1224,7 @@ def match_creators():
             })
 
         campaign_entry = {
-            "id": f"live_{len(campaigns_store)}",
+            "id": db_next_live_id(),
             "name": data.get("campaign_text", "")[:40] + "...",
             "brand": data.get("campaign_text", "").split(".")[0].replace("Brand/Product:", "").strip()[:30],
             "goal": campaign_goal,
@@ -1103,10 +1235,8 @@ def match_creators():
             "country": "India",
             "timestamp": pd.Timestamp.now().isoformat(),
         }
-        if not any(c["campaign_text"] == campaign_text for c in campaigns_store):
-            campaigns_store.append(campaign_entry)
-            if len(campaigns_store) > 50:
-                campaigns_store.pop(5)
+        if not db_campaign_exists(campaign_text):
+            db_add_campaign(campaign_entry)
 
         return jsonify({
             "recommendations": formatted_recos,
@@ -1131,7 +1261,7 @@ def creator_match():
         handle        = str(data.get("handle", "creator")).strip()
 
         results = []
-        for camp in campaigns_store:
+        for camp in db_get_campaigns():
             camp_text = (camp.get("campaign_text") or "").lower()
             camp_cats = [c.lower() for c in camp.get("category_filters", [])]
 
@@ -1675,7 +1805,16 @@ def real_creators():
     """Returns real influencers from influencers_engine_ready.csv for the dashboard."""
     try:
         df = engine.creators_df.copy()
-        top = df[df['fake_account'] == 0].sort_values('engagement_rate', ascending=False).head(100)
+        auth_df = df[df['fake_account'] == 0].copy()
+
+        # Composite rank: 35% quality score + 65% reach (log-normalised followers)
+        # This ensures mega-influencers (Kendall, Priyanka etc.) surface alongside quality micro-creators
+        import numpy as np
+        max_log = np.log10(auth_df['followers'].max())
+        auth_df['_reach_norm'] = np.log10(auth_df['followers'].clip(lower=1)) / max_log * 100
+        auth_df['_composite']  = auth_df['ratefluencer_score'] * 0.35 + auth_df['_reach_norm'] * 0.65
+
+        top = auth_df.sort_values('_composite', ascending=False).head(200)
 
         palettes = [
             ('#E1F5EE','#085041'), ('#E6F1FB','#0C447C'),
@@ -1890,105 +2029,155 @@ Return ONLY a valid JSON object:
         return jsonify({"error": str(e)}), 500
 
 
+# 5-minute per-category trend cache — prevents Google Trends rate-limit hammering
+_trend_cache: dict = {}
+_TREND_CACHE_TTL = 300  # seconds
+
+def _llm_trend_fallback(category: str, goal: str, n: int = 5) -> list:
+    """
+    Strict LLM fallback — generates creator-relevant content trends,
+    NOT news headlines. Different categories always produce different results.
+    """
+    import time as _time
+    goal_line = f" aligned with the goal: {goal}" if goal else ""
+    prompt = f"""You are a social media content strategist for Instagram and LinkedIn creators in India.
+
+Today is {pd.Timestamp.now().strftime('%d %B %Y')}.
+
+Generate exactly {n} CONTENT TREND IDEAS for {category} creators{goal_line}.
+
+STRICT RULES:
+- These must be CONTENT FORMATS / VIRAL CONCEPTS — not news headlines or world events
+- Each trend must be specific to the {category} niche
+- Examples of good trends: "60-second morning skincare routine reels", "before/after transformation posts", "product unboxing with honest review"
+- Examples of BAD trends (DO NOT generate): "Sunscreen safety study", "Mosquito repellent research", anything that reads like a news headline
+- All 5 trends must be DIFFERENT from each other
+- Make them feel like what's actually going viral on Instagram India right now
+
+Score each (0-100): growth_velocity, engagement_potential, novelty, audience_relevance, search_interest
+trend_score = growth_velocity*0.3 + engagement_potential*0.25 + novelty*0.2 + audience_relevance*0.15 + search_interest*0.1
+
+Return ONLY valid JSON — no markdown, no extra text:
+{{"trends": [{{"topic": "<short catchy trend name>", "description": "<1 sentence: what this content format is and why it works>",
+  "source": "AI Trend Analysis", "growth_velocity": <n>, "engagement_potential": <n>,
+  "novelty": <n>, "audience_relevance": <n>, "search_interest": <n>, "trend_score": <n>,
+  "why": "<why this is blowing up right now for {category} creators>"}}]}}"""
+
+    resp = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.85,
+        max_tokens=1400,
+    )
+    result = _parse_groq_json(resp.choices[0].message.content.strip())
+    trends = result.get("trends", []) if result else []
+    return sorted(trends, key=lambda t: t.get("trend_score", 0), reverse=True)
+
+
+def _is_news_headline(topic: str) -> bool:
+    """Filter out news headlines that aren't useful for creators."""
+    news_signals = [
+        'study', 'research', 'report', 'survey', 'scientist', 'according to',
+        'found that', 'shows that', 'reveals', 'can deet', 'standards',
+        'award', 'pantry', 'summit', 'government', 'minister', 'court',
+        'election', 'parliament', 'policy', 'bill passed',
+    ]
+    t = topic.lower()
+    return any(sig in t for sig in news_signals) or len(topic) > 70
+
+
 @app.route("/api/trend-ranking", methods=["POST"])
 @rate_limit("20/hour")
 def trend_ranking():
     """
-    Discover and rank trending topics.
-    Primary: Google Trends (pytrends)  -  real interest data from India.
-    Enrichment: LLM adds descriptions and engagement context.
-    Fallback: pure LLM when pytrends is unavailable or rate-limited.
+    Discover and rank trending topics for creators.
+    Primary: Google Trends + Reddit + News RSS (real data).
+    Fallback: strict creator-focused LLM when real data is unavailable.
+    Cache: 5 min per category to avoid rate-limit hammering.
     """
     try:
         data     = request.get_json() or {}
         category = data.get("category", "General")
         goal     = data.get("goal", "")
 
-        # -- Step 1: real Google Trends data ----------------------------------
-        gt_trends = fetch_combined_trends(category)
-        logger.info(f"Google Trends returned {len(gt_trends)} results for '{category}'")
+        # -- Cache check -------------------------------------------------------
+        import time as _time
+        cache_key = f"{category}:{goal}"
+        cached = _trend_cache.get(cache_key)
+        if cached and (_time.time() - cached['ts']) < _TREND_CACHE_TTL:
+            logger.info(f"Trend cache hit for '{cache_key}'")
+            return jsonify(cached['data']), 200
 
-        if gt_trends:
-            # Enrich with LLM descriptions
+        # -- Step 1: real data sources -----------------------------------------
+        real_trends = fetch_combined_trends(category)
+
+        # Filter out news headlines — keep only creator-relevant topics
+        real_trends = [t for t in real_trends if not _is_news_headline(t['topic'])]
+        logger.info(f"Real trends after filtering: {len(real_trends)} for '{category}'")
+
+        if len(real_trends) >= 3:
+            # Enrich real trends with LLM context
             topics_list = "\n".join(
-                f"- {t['topic']} (interest={t['current_interest']}, velocity={t['growth_velocity']})"
-                for t in gt_trends
+                f"- {t['topic']} (source: {t.get('source','?')}, velocity={t['growth_velocity']})"
+                for t in real_trends
             )
-            enrich_prompt = f"""You are a social media strategist.
-These topics are currently trending on Google in India for the {category} category:
+            enrich_prompt = f"""You are a social media strategist specialising in {category} content for Indian creators.
+
+These topics are currently trending for the {category} category:
 {topics_list}
 
-For EACH topic, provide:
-- A 1-sentence description of why it's trending and who cares
-- engagement_potential score 0-100 for Instagram/LinkedIn content
-- audience_relevance score 0-100 for {category} creators
+For EACH topic, rewrite it as a creator-friendly content trend name and explain WHY a {category} creator should make content about it right now.
 
 Return ONLY valid JSON:
-{{"enriched": [
-  {{"topic": "<exact topic from list>", "description": "<1 sentence>",
-    "engagement_potential": <0-100>, "audience_relevance": <0-100>}}
-]}}"""
+{{"enriched": [{{"topic": "<original topic>", "creator_angle": "<creator-friendly version, max 6 words>",
+  "description": "<1 sentence: what content to make and why it gets engagement>",
+  "engagement_potential": <0-100>, "audience_relevance": <0-100>}}]}}"""
 
             try:
                 enrich_resp = groq_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": enrich_prompt}],
-                    temperature=0.4,
-                    max_tokens=600,
+                    temperature=0.5,
+                    max_tokens=700,
                 )
                 enrich_data = _parse_groq_json(enrich_resp.choices[0].message.content.strip())
                 enriched_map = {
                     e['topic'].lower(): e
-                    for e in enrich_data.get('enriched', [])
+                    for e in (enrich_data.get('enriched', []) if enrich_data else [])
                 }
             except Exception:
                 enriched_map = {}
 
             trends = []
-            for t in gt_trends:
+            for t in real_trends:
                 enrich = enriched_map.get(t['topic'].lower(), {})
                 trends.append({
-                    "topic":               t['topic'],
-                    "description":         enrich.get('description', t['why_trending']),
-                    "source":              "Google Trends",
+                    "topic":               enrich.get('creator_angle', t['topic']),
+                    "description":         enrich.get('description', t.get('why_trending', '')),
+                    "source":              t.get('source', 'Real Data'),
                     "growth_velocity":     t['growth_velocity'],
                     "engagement_potential": enrich.get('engagement_potential', min(100, t['trend_score'] + 5)),
                     "novelty":             t['novelty'],
-                    "audience_relevance":  enrich.get('audience_relevance', min(100, t['audience_fit'])),
+                    "audience_relevance":  enrich.get('audience_relevance', min(100, t.get('audience_fit', 70))),
                     "search_interest":     t['current_interest'],
                     "trend_score":         t['trend_score'],
-                    "why":                 enrich.get('description', t['why_trending']),
+                    "why":                 enrich.get('description', t.get('why_trending', '')),
                     "data_backed":         True,
                 })
-            return jsonify({"trends": trends, "category": category, "source": "Google Trends"}), 200
 
-        # -- Step 2: LLM fallback ----------------------------------------------
-        logger.info("Google Trends unavailable  -  using LLM fallback for trend ranking")
-        prompt = f"""You are a real-time trend intelligence engine.
-As of {pd.Timestamp.now().strftime('%B %Y')}, identify 5 CURRENTLY TRENDING topics for the {category} category{' for goal: ' + goal if goal else ''}.
+            payload = {"trends": trends, "category": category, "source": "Real Data + AI"}
+            _trend_cache[cache_key] = {'data': payload, 'ts': _time.time()}
+            return jsonify(payload), 200
 
-Score each trend (0-100):
-- growth_velocity, engagement_potential, novelty, audience_relevance, search_interest
-- trend_score = (growth_velocity*0.3 + engagement_potential*0.25 + novelty*0.2 + audience_relevance*0.15 + search_interest*0.1)
+        # -- Step 2: LLM fallback (all real sources failed or filtered out) ----
+        logger.info(f"Real data insufficient for '{category}' — using creator-focused LLM")
+        trends = _llm_trend_fallback(category, goal)
+        if not trends:
+            return jsonify({"error": "Failed to generate trends"}), 500
 
-Return ONLY valid JSON:
-{{"trends": [{{"topic": "<name>", "description": "<1 sentence>", "source": "<platform>",
-  "growth_velocity": <n>, "engagement_potential": <n>, "novelty": <n>,
-  "audience_relevance": <n>, "search_interest": <n>, "trend_score": <n>,
-  "why": "<why now>"}}]}}"""
-
-        resp = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=1200,
-        )
-        result = _parse_groq_json(resp.choices[0].message.content.strip())
-        if not result:
-            return jsonify({"error": "Failed to parse trends"}), 500
-
-        trends = sorted(result.get("trends", []), key=lambda t: t.get("trend_score", 0), reverse=True)
-        return jsonify({"trends": trends, "category": category, "source": "LLM"}), 200
+        payload = {"trends": trends, "category": category, "source": "AI Trend Analysis"}
+        _trend_cache[cache_key] = {'data': payload, 'ts': _time.time()}
+        return jsonify(payload), 200
 
     except Exception as e:
         logger.error(f"Trend ranking failed: {e}")

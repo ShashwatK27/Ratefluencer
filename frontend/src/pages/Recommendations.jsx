@@ -307,7 +307,7 @@ export default function Recommendations() {
               <button className="btn btn-ghost btn-sm" onClick={() => navigate('/campaign')}>
                 ✏️ Edit Campaign
               </button>
-              <button className="btn btn-primary btn-sm" onClick={() => navigate('/campaign')}>New Campaign</button>
+              <button className="btn btn-primary btn-sm" onClick={() => navigate('/campaign', { state: { fresh: true } })}>New Campaign</button>
             </div>
           </div>
 
