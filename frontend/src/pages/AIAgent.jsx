@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
 
@@ -53,7 +54,8 @@ function FeedbackBar({ result }) {
   );
 }
 
-export default function AIAgent({ onNavigate }) {
+export default function AIAgent() {
+  const navigate = useNavigate();
   const [goal, setGoal] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -118,7 +120,7 @@ export default function AIAgent({ onNavigate }) {
       <div style={{ maxWidth: "780px", margin: "0 auto", padding: "3rem 2rem" }}>
 
         <div style={{ marginBottom: "3rem" }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('landing')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
             ← Home
           </button>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>Autonomous AI Agent</h2>
@@ -166,6 +168,45 @@ export default function AIAgent({ onNavigate }) {
               <div className="section-label">Agent Output</div>
               <button onClick={runAgent} className="btn btn-ghost btn-sm" style={{ fontSize: "12px" }}>↻ Run Again</button>
             </div>
+
+            {/* Agent Reasoning Trail */}
+            {result.content_attempts && result.content_attempts.length > 0 && (
+              <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "16px" }}>
+                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>
+                  🧠 Agent Reasoning — {result.content_attempts.length} iteration{result.content_attempts.length > 1 ? "s" : ""}
+                  {result.agent_refined && <span style={{ marginLeft: "8px", color: "var(--accent)" }}>✓ Content refined</span>}
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                  {result.content_attempts.map(attempt => {
+                    const vColor = attempt.virality_score >= 68 ? "var(--accent)" : attempt.virality_score >= 50 ? "var(--gold)" : "var(--coral)";
+                    return (
+                      <div key={attempt.iteration} style={{
+                        background: "var(--bg)", border: `1px solid ${vColor}30`,
+                        borderRadius: "var(--radius-sm)", padding: "10px 14px", minWidth: "160px",
+                      }}>
+                        <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "4px" }}>
+                          Iteration {attempt.iteration}
+                        </div>
+                        <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: vColor, lineHeight: 1 }}>
+                          {attempt.virality_score}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "var(--text3)", marginTop: "2px" }}>{attempt.bucket}</div>
+                        {attempt.refinement_used && (
+                          <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "6px", fontFamily: "var(--font-mono)", wordBreak: "break-word" }}>
+                            Hint: {String(attempt.refinement_used).slice(0, 60)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {result.creator_pool && result.creator_pool.length > 0 && (
+                  <div style={{ fontSize: "12px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
+                    Evaluated creators: {result.creator_pool.map(c => `${c.name} (RF=${c.rf_score})`).join(" · ")}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Platform tabs */}
             <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>

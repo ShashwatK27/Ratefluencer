@@ -67,17 +67,17 @@ export const aiInsights = [
   {
     icon: '🎯',
     title: 'Budget Allocation',
-    text: 'With ₹10L, allocate 60% to Ronaldo for reach, 30% to Gomez for category alignment, and 10% to a micro-creator for community engagement. This split maximizes predicted ROI.',
+    text: 'With ₹10L, allocate 60% to the top match for reach, 30% to the second for category alignment, and 10% to a micro-creator for community engagement. This split maximises predicted ROI.',
   },
   {
     icon: '⚠️',
     title: 'Risk Flag',
-    text: "Ronaldo's audience skews 65% male. For a skincare brand, supplement with Selena Gomez whose 72% female audience drives 3× more purchase intent for beauty products.",
+    text: 'Supplement mega-influencers with niche micro-creators whose audience demographics better align with your target segment for stronger purchase intent.',
   },
   {
     icon: '💡',
     title: 'Nano Opportunity',
-    text: 'Our model identified 14 micro-creators (50K–200K) in Indian wellness with Ratefluencer™ scores above 80. Combining 2–3 of them may outperform a single mega-influencer at 40% lower cost.',
+    text: 'Our model identified micro-creators (50K–200K) in Indian wellness with Ratefluencer™ scores above 80. Combining 2–3 of them may outperform a single mega-influencer at 40% lower cost.',
   },
 ];
 
@@ -100,20 +100,20 @@ export const campaignCategories = [
 // ── Sidebar Navigation Items ───────────────────────────────────────────────
 export const sidebarNav = {
   main: [
-    { icon: '📊', label: 'Dashboard',  page: 'dashboard',       iconBg: 'var(--accent-dim)' },
-    { icon: '🎯', label: 'Campaigns',  page: 'campaign',        iconBg: 'var(--blue-dim)'   },
-    { icon: '⭐', label: 'Results',    page: 'recommendations', iconBg: 'var(--gold-dim)'   },
+    { icon: '📊', label: 'Dashboard',  route: '/dashboard',       iconBg: 'var(--accent-dim)' },
+    { icon: '🎯', label: 'Campaigns',  route: '/campaign',        iconBg: 'var(--blue-dim)'   },
+    { icon: '⭐', label: 'Results',    route: '/recommendations', iconBg: 'var(--gold-dim)'   },
   ],
   analytics: [
-    { icon: '🛡️', label: 'Authenticity',  page: 'authenticity',  iconBg: 'var(--coral-dim)'  },
-    { icon: '📈', label: 'Growth Engine', page: 'growthEngine',  iconBg: 'var(--purple-dim)' },
-    { icon: '🏷️', label: 'Brand Match',   page: 'brandMatch',    iconBg: 'var(--accent-dim)' },
-    { icon: '📊', label: 'Real Insights', page: 'insights',      iconBg: 'var(--gold-dim)'   },
-    { icon: '🌍', label: 'Real Creators', page: 'realCreators',  iconBg: 'var(--blue-dim)'   },
-    { icon: '🔥', label: 'Trend Ranking', page: 'trendRanking',  iconBg: 'var(--coral-dim)'  },
+    { icon: '🛡️', label: 'Authenticity',  route: '/authenticity',  iconBg: 'var(--coral-dim)'  },
+    { icon: '📈', label: 'Growth Engine', route: '/growth-engine', iconBg: 'var(--purple-dim)' },
+    { icon: '🏷️', label: 'Brand Match',   route: '/brand-match',   iconBg: 'var(--accent-dim)' },
+    { icon: '📊', label: 'Real Insights', route: '/insights',      iconBg: 'var(--gold-dim)'   },
+    { icon: '🌍', label: 'Real Creators', route: '/real-creators', iconBg: 'var(--blue-dim)'   },
+    { icon: '🔥', label: 'Trend Ranking', route: '/trend-ranking', iconBg: 'var(--coral-dim)'  },
   ],
   settings: [
-    { icon: '📋', label: 'Shortlist',    page: 'shortlist',    iconBg: 'rgba(255,255,255,0.05)' },
-    { icon: '⚙️', label: 'Preferences', page: 'preferences',  iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '📋', label: 'Shortlist',   route: '/shortlist',    iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '⚙️', label: 'Preferences', route: '/preferences',  iconBg: 'rgba(255,255,255,0.05)' },
   ],
 };

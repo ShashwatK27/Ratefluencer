@@ -1,7 +1,9 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar.jsx";
 
-export default function PreferencesPage({ currentPage, onNavigate }) {
+export default function PreferencesPage() {
+  const navigate = useNavigate();
   const [defaultGoal, setDefaultGoal] = useState("balanced");
   const [defaultBudget, setDefaultBudget] = useState("500000");
   const [minAuth, setMinAuth] = useState("70");
@@ -16,7 +18,7 @@ export default function PreferencesPage({ currentPage, onNavigate }) {
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "600px" }}>

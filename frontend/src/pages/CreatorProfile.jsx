@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { config } from "../config.js";
 
 function ScoreArc({ score, color, label, size = 120 }) {
@@ -38,7 +39,11 @@ function ScoreBar({ label, value, color, desc }) {
   );
 }
 
-export default function CreatorProfile({ creator, onNavigate, onBack }) {
+export default function CreatorProfile() {
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const creator   = location.state?.creator;
+
   const [insights, setInsights] = useState(null);
 
   useEffect(() => {
@@ -55,7 +60,17 @@ export default function CreatorProfile({ creator, onNavigate, onBack }) {
       .catch(() => {});
   }, [creator]);
 
-  if (!creator) return null;
+  if (!creator) {
+    return (
+      <div style={{ paddingTop: "56px", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem" }}>
+        <div style={{ fontSize: "32px" }}>👤</div>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: "20px" }}>No creator selected</div>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/dashboard')}>
+          ← Back to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   const viralityScore = creator.score || 72;
   const authScore     = creator.auth  || 80;
@@ -88,13 +103,8 @@ export default function CreatorProfile({ creator, onNavigate, onBack }) {
     <div style={{ paddingTop: "56px", minHeight: "100vh" }}>
       <div style={{ maxWidth: "900px", margin: "0 auto", padding: "3rem 2rem" }}>
 
-        {/* Back button */}
-        <button
-          onClick={onBack}
-          className="btn btn-ghost btn-sm"
-          style={{ marginBottom: "2rem", fontSize: "13px" }}
-        >
-          ← Back to Dashboard
+        <button onClick={() => navigate(-1)} className="btn btn-ghost btn-sm" style={{ marginBottom: "2rem", fontSize: "13px" }}>
+          ← Back
         </button>
 
         {/* Header */}
@@ -138,7 +148,7 @@ export default function CreatorProfile({ creator, onNavigate, onBack }) {
 
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => onNavigate("viralLab")}
+            onClick={() => navigate("/viral-lab")}
             style={{ flexShrink: 0 }}
           >
             🚀 Generate Content
@@ -251,14 +261,14 @@ export default function CreatorProfile({ creator, onNavigate, onBack }) {
         <div className="fade-up delay-4" style={{ display: "flex", gap: "12px" }}>
           <button
             className="btn btn-primary"
-            onClick={() => onNavigate("viralLab")}
+            onClick={() => navigate("/viral-lab")}
             style={{ flex: 1, justifyContent: "center", padding: "14px" }}
           >
             🚀 Generate Viral Content for {creator.cat}
           </button>
           <button
             className="btn btn-ghost"
-            onClick={() => onNavigate("aiAgent")}
+            onClick={() => navigate("/ai-agent")}
             style={{ flex: 1, justifyContent: "center", padding: "14px" }}
           >
             🤖 Run AI Agent for My Niche

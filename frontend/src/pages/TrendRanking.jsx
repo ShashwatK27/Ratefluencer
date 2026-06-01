@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
 import Sidebar from "../components/Sidebar.jsx";
@@ -76,7 +77,8 @@ function TrendCard({ trend, rank }) {
   );
 }
 
-export default function TrendRanking({ currentPage, onNavigate }) {
+export default function TrendRanking() {
+  const navigate = useNavigate();
   const [category, setCategory] = useState("General");
   const [goal, setGoal] = useState("");
   const [trends, setTrends] = useState([]);
@@ -101,7 +103,7 @@ export default function TrendRanking({ currentPage, onNavigate }) {
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "860px" }}>

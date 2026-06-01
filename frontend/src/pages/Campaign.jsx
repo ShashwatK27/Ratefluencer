@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { campaignCategories } from '../data/index.js';
+import { useApp } from '../context/AppContext.jsx';
+import { config } from '../config.js';
 
 function FormGroup({ label, children, full }) {
   return (
@@ -47,8 +50,8 @@ function StepIndicator({ current }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '2.5rem' }}>
       {STEPS.map((step, i) => {
-        const done    = current > step.num;
-        const active  = current === step.num;
+        const done   = current > step.num;
+        const active = current === step.num;
         return (
           <React.Fragment key={step.num}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
@@ -78,7 +81,13 @@ function StepIndicator({ current }) {
   );
 }
 
-export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) {
+export default function Campaign() {
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const { setCampaignMeta, setRecos, setInsights, setLastFormData, lastFormData } = useApp();
+
+  const initialForm = location.state?.initialForm || lastFormData;
+
   const [step, setStep] = useState(initialForm ? 5 : 1);
   const [form, setForm] = useState(initialForm || {
     name: '', brand: '', goal: 'Brand Awareness',
@@ -88,9 +97,9 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
     minAuth: '75+', tier: 'Macro (100K–1M)', minEr: '3%+', excludedBrands: '',
   });
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
-
   const formatBudget = (v) => '₹' + parseInt(v).toLocaleString('en-IN');
 
   const validateStep = (s) => {
@@ -109,11 +118,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
   const next = () => { if (validateStep(step)) setStep(s => Math.min(s + 1, 5)); };
   const back = () => { setErrors({}); setStep(s => Math.max(s - 1, 1)); };
 
-  const handleAnalyze = () => {
-    if (!validateStep(step)) return;
-    onCampaignSubmit(form);
-  };
-
   const toggleCategory = (label) => {
     set('selectedCategories',
       form.selectedCategories.includes(label)
@@ -123,17 +127,103 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
     setErrors(p => ({ ...p, categories: '' }));
   };
 
+  const handleAnalyze = async () => {
+    if (!validateStep(step)) return;
+    setLastFormData(form);
+    setLoading(true);
+
+    setCampaignMeta({
+      cats: form.selectedCategories.join(', ') || 'General',
+      budget: formatBudget(form.budget),
+      budgetRaw: form.budget,
+      ageGroup: form.ageGroup,
+    });
+
+    try {
+      const campaignText = `Brand/Product: ${form.brand || 'General Product'}. Campaign: ${form.name || 'General Campaign'}. Goal: ${form.goal}. Target Audience: ${form.audience || `Audience aged ${form.ageGroup}`}. Niche category focus: ${form.selectedCategories.join(', ')}.`;
+
+      const response = await fetch(config.api.endpoints.match, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaign_text: campaignText,
+          campaign_goal: form.goal,
+          category_filters: form.selectedCategories,
+          min_authenticity: form.minAuth,
+          tier_filter: form.tier,
+          min_engagement_rate: form.minEr,
+          excluded_brands: form.excludedBrands,
+          top_k: 3,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setRecos(data.recommendations);
+      setInsights(data.insights);
+
+      // Save campaign history (keep last 5)
+      try {
+        const history = JSON.parse(localStorage.getItem('ratefluencer_history') || '[]');
+        const entry = {
+          id: Date.now(),
+          date: new Date().toLocaleDateString('en-IN'),
+          name: form.name,
+          brand: form.brand,
+          goal: form.goal,
+          cats: form.selectedCategories.join(', '),
+          budget: formatBudget(form.budget),
+          recos: (data.recommendations || []).slice(0, 3),
+        };
+        history.unshift(entry);
+        localStorage.setItem('ratefluencer_history', JSON.stringify(history.slice(0, 5)));
+      } catch (_) {}
+
+    } catch (err) {
+      console.error('Failed to fetch matches:', err);
+      setRecos([]);
+      setInsights([]);
+    } finally {
+      setLoading(false);
+      navigate('/recommendations');
+    }
+  };
+
   const cardStyle = {
     background: 'var(--bg2)', border: '1px solid var(--border)',
     borderRadius: 'var(--radius)', padding: '2rem', marginBottom: '1.5rem',
   };
+
+  if (loading) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(11, 13, 15, 0.9)', backdropFilter: 'blur(12px)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', color: '#fff', gap: '1.5rem',
+        animation: 'fadeIn 0.3s ease-out',
+      }}>
+        <div style={{
+          width: '60px', height: '60px', borderRadius: '50%',
+          border: '4px solid rgba(200, 240, 104, 0.1)',
+          borderTopColor: 'var(--accent)', animation: 'spin 1s linear infinite',
+        }} />
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', letterSpacing: '-0.02em', fontWeight: 600 }}>
+          Analyzing Creator Ecosystem...
+        </div>
+        <p style={{ color: 'var(--text2)', fontSize: '14px', maxWidth: '380px', textAlign: 'center', lineHeight: 1.6 }}>
+          Our RandomForest growth engines and XGBoost safety models are evaluating 5,000 profiles for authenticity, virality, and category relevance.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ paddingTop: '56px' }}>
       <div style={{ maxWidth: '680px', margin: '0 auto', padding: '3rem 2rem' }}>
 
         <div style={{ marginBottom: '2rem' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('landing')} style={{ marginBottom: '1.5rem', fontSize: '13px' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')} style={{ marginBottom: '1.5rem', fontSize: '13px' }}>
             ← Home
           </button>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', marginBottom: '4px' }}>Create Campaign</h2>
@@ -142,7 +232,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
 
         <StepIndicator current={step} />
 
-        {/* ── Step 1: Basics ── */}
         {step === 1 && (
           <div className="fade-up" style={cardStyle}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>📋 Campaign Basics</div>
@@ -178,7 +267,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
           </div>
         )}
 
-        {/* ── Step 2: Budget ── */}
         {step === 2 && (
           <div className="fade-up" style={cardStyle}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>💰 Campaign Budget</div>
@@ -210,7 +298,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
           </div>
         )}
 
-        {/* ── Step 3: Audience ── */}
         {step === 3 && (
           <div className="fade-up" style={cardStyle}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>👥 Target Audience</div>
@@ -230,7 +317,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
           </div>
         )}
 
-        {/* ── Step 4: Categories ── */}
         {step === 4 && (
           <div className="fade-up" style={cardStyle}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>🏷️ Content Category</div>
@@ -270,7 +356,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
           </div>
         )}
 
-        {/* ── Step 5: Filters ── */}
         {step === 5 && (
           <div className="fade-up" style={cardStyle}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>
@@ -298,7 +383,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
               </FormGroup>
             </div>
 
-            {/* Campaign summary */}
             <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '13px', color: 'var(--text2)', lineHeight: 1.8 }}>
               <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '8px' }}>Campaign Summary</div>
               <strong style={{ color: 'var(--text)' }}>{form.name || 'Untitled'}</strong> for <strong style={{ color: 'var(--accent)' }}>{form.brand || '—'}</strong> ·{' '}
@@ -307,7 +391,6 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
           </div>
         )}
 
-        {/* ── Navigation buttons ── */}
         <div style={{ display: 'flex', gap: '12px' }}>
           {step > 1 && (
             <button className="btn btn-ghost" onClick={back} style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: '15px' }}>
@@ -315,10 +398,8 @@ export default function Campaign({ onNavigate, onCampaignSubmit, initialForm }) 
             </button>
           )}
           {step < 5 ? (
-            <button
-              className="btn btn-primary" onClick={next}
-              style={{ flex: 2, justifyContent: 'center', padding: '14px', fontSize: '15px' }}
-            >
+            <button className="btn btn-primary" onClick={next}
+              style={{ flex: 2, justifyContent: 'center', padding: '14px', fontSize: '15px' }}>
               Next →
             </button>
           ) : (

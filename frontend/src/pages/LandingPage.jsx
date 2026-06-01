@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // ── Animated counter ────────────────────────────────────────────────────────
 function CountUp({ target, suffix = '', duration = 1800 }) {
@@ -52,9 +53,9 @@ function MiniRing({ score, color, size = 56, animate = true }) {
 // ── Live product preview card ───────────────────────────────────────────────
 function HeroPreview() {
   const creators = [
-    { name: 'Shashwat',       meta: 'Beauty · 1.2M · Instagram', score: 94, growth: 88, auth: 96, brand: 91, color: '#C8F068', badge: '👑 #1 Match' },
-    { name: 'Vaidehi Turkar', meta: 'Fitness · 480K · Instagram', score: 81, growth: 85, auth: 90, brand: 78, color: '#68B8F0', badge: null },
-    { name: 'Priya Travels',  meta: 'Travel · 720K · Instagram',  score: 73, growth: 70, auth: 83, brand: 86, color: '#F0C96A', badge: null },
+    { name: 'Shashwat',       meta: 'Fitness · 1.2M · Instagram', score: 94, growth: 88, auth: 96, brand: 91, color: '#C8F068', badge: '👑 #1 Match' },
+    { name: 'Vaidehi Turkar', meta: 'Beauty · 480K · Instagram', score: 81, growth: 85, auth: 90, brand: 78, color: '#68B8F0', badge: null },
+    { name: 'Ram Travels',  meta: 'Travel · 720K · Instagram',  score: 73, growth: 70, auth: 83, brand: 86, color: '#F0C96A', badge: null },
   ];
 
   return (
@@ -186,7 +187,17 @@ const STATS = [
   { target: 30000, suffix: '+', label: 'Real Posts Benchmarked',  color: 'var(--gold)'   },
 ];
 
-export default function LandingPage({ onNavigate }) {
+export default function LandingPage() {
+  const navigate = useNavigate();
+  const onNavigate = (page) => {
+    const map = {
+      landing: '/', dashboard: '/dashboard', campaign: '/campaign',
+      recommendations: '/recommendations', viralLab: '/viral-lab',
+      aiAgent: '/ai-agent', shortlist: '/shortlist',
+      creatorCorner: '/creator-corner',
+    };
+    navigate(map[page] || '/');
+  };
   return (
     <div style={{ paddingTop: '56px' }}>
 

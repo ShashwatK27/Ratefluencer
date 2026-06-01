@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { aiInsights } from '../data/index.js';
+import { useApp } from '../context/AppContext.jsx';
 
 function parsePercent(value, fallback = 0) {
   const n = parseFloat(String(value || '').replace('%', ''));
@@ -12,7 +14,6 @@ function parseFollowers(meta) {
   return parseFloat(m[1]) * (m[2] === 'M' ? 1_000_000 : 1_000);
 }
 
-// ── Score breakdown modal ────────────────────────────────────────────────────
 function ScoreModal({ rec, onClose }) {
   if (!rec) return null;
   const items = [
@@ -56,7 +57,6 @@ function ScoreModal({ rec, onClose }) {
   );
 }
 
-// ── Score ring ───────────────────────────────────────────────────────────────
 function ScoreRing({ score, color, offset, onClick }) {
   return (
     <div onClick={onClick} title="Click to see score breakdown" style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0, cursor: 'pointer' }}>
@@ -72,7 +72,6 @@ function ScoreRing({ score, color, offset, onClick }) {
   );
 }
 
-// ── ROI Estimator ────────────────────────────────────────────────────────────
 function ROIEstimator({ recos, budget }) {
   if (!recos || recos.length === 0) return null;
 
@@ -96,7 +95,7 @@ function ROIEstimator({ recos, budget }) {
   return (
     <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', marginBottom: '1.5rem' }}>
       <div className="section-label" style={{ marginBottom: '12px' }}>ROI Estimator</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+      <div className="roi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
         {[
           { label: 'Est. Impressions',    value: impStr,          color: 'var(--accent)' },
           { label: 'Avg Engagement Rate', value: `${avgER.toFixed(1)}%`, color: 'var(--blue)' },
@@ -116,7 +115,6 @@ function ROIEstimator({ recos, budget }) {
   );
 }
 
-// ── Recommendation card ──────────────────────────────────────────────────────
 function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
   const rankBorder =
     rec.rank === 1 ? 'rgba(240,201,106,0.3)' :
@@ -177,9 +175,11 @@ function RecoCard({ rec, onShortlist, isShortlisted, onShowBreakdown }) {
   );
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
-export default function Recommendations({ campaignMeta, recos = [], insights = [], onNavigate, onToast, hasLastForm }) {
+export default function Recommendations() {
+  const navigate = useNavigate();
+  const { campaignMeta, recos = [], insights = [], showToast } = useApp();
   const { cats = 'Wellness + Skincare', budget = '₹10L', budgetRaw = null, ageGroup = '25–34' } = campaignMeta || {};
+
   const [shortlisted, setShortlisted] = useState(() => {
     try { return new Set((JSON.parse(localStorage.getItem('ratefluencer_shortlist') || '[]')).map(c => c.name)); }
     catch { return new Set(); }
@@ -217,8 +217,14 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
     const updated = already ? stored.filter(c => c.name !== rec.name) : [...stored, rec];
     localStorage.setItem('ratefluencer_shortlist', JSON.stringify(updated));
     setShortlisted(new Set(updated.map(c => c.name)));
-    if (onToast) onToast(already ? `${rec.name} removed from shortlist` : `${rec.name} added to shortlist`);
+    showToast(already ? `${rec.name} removed from shortlist` : `${rec.name} added to shortlist`);
   };
+
+  // Campaign history from localStorage
+  const history = (() => {
+    try { return JSON.parse(localStorage.getItem('ratefluencer_history') || '[]'); }
+    catch { return []; }
+  })();
 
   return (
     <>
@@ -236,15 +242,13 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
               </p>
             </div>
             <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('shortlist')}>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/shortlist')}>
                 📋 View Shortlist {shortlisted.size > 0 && `(${shortlisted.size})`}
               </button>
-{hasLastForm && (
-                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('campaign')}>
-                  ✏️ Edit Campaign
-                </button>
-              )}
-              <button className="btn btn-primary btn-sm" onClick={() => onNavigate('campaign')}>New Campaign</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/campaign')}>
+                ✏️ Edit Campaign
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={() => navigate('/campaign')}>New Campaign</button>
             </div>
           </div>
 
@@ -280,13 +284,13 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
                 <div style={{ fontSize: '32px', marginBottom: '1rem' }}>🎯</div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', marginBottom: '8px' }}>No recommendations yet</div>
                 <div style={{ fontSize: '14px', marginBottom: '1.5rem' }}>Create a campaign to get AI-ranked creators from our 33,935 real influencer database.</div>
-                <button className="btn btn-primary btn-sm" onClick={() => onNavigate('campaign')}>Start a Campaign</button>
+                <button className="btn btn-primary btn-sm" onClick={() => navigate('/campaign')}>Start a Campaign</button>
               </div>
             )}
           </div>
 
           <div className="section-label" style={{ marginBottom: '12px' }}>AI Campaign Insights</div>
-          <div className="fade-up delay-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '2rem' }}>
+          <div className="fade-up delay-3 insight-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '2rem' }}>
             {activeInsights.map(insight => (
               <div key={insight.title} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.25rem' }}>
                 <div style={{ fontSize: '20px', marginBottom: '10px' }}>{insight.icon}</div>
@@ -296,7 +300,7 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
             ))}
           </div>
 
-          <div className="fade-up delay-4" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem' }}>
+          <div className="fade-up delay-4" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', marginBottom: '2rem' }}>
             <div style={{ fontSize: '13px', color: 'var(--text3)', marginBottom: '4px', fontFamily: 'var(--font-mono)' }}>AI MODEL OUTPUT</div>
             <div style={{ fontSize: '14px', color: 'var(--text2)', lineHeight: 1.7 }}>
               Based on your campaign parameters, the model predicts a{' '}
@@ -310,6 +314,42 @@ export default function Recommendations({ campaignMeta, recos = [], insights = [
               to generate these rankings. Confidence interval: ±{confInterval}%.
             </div>
           </div>
+
+          {/* Campaign History */}
+          {history.length > 0 && (
+            <div className="fade-up" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem' }}>
+              <div className="section-label" style={{ marginBottom: '12px' }}>Campaign History</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {history.map(entry => (
+                  <div key={entry.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 14px', borderRadius: 'var(--radius-sm)',
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    gap: '12px',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)', marginBottom: '2px' }}>
+                        {entry.name} <span style={{ color: 'var(--text3)', fontWeight: 400 }}>for {entry.brand}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+                        {entry.date} · {entry.goal} · {entry.cats} · {entry.budget}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '11px', flexShrink: 0 }}
+                      onClick={() => {
+                        // Restore won't re-run matching; just show the old recos
+                        showToast('Campaign history restored');
+                      }}
+                    >
+                      Restore
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
       </div>

@@ -181,7 +181,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 
 /* ── Toast notification ── */
 .toast {
-  position: fixed; bottom: 24px; right: 24px; z-index: 99999;
   background: var(--bg2); border: 1px solid rgba(200,240,104,0.25);
   border-radius: var(--radius-sm); padding: 12px 18px;
   font-size: 13px; color: var(--accent); display: flex; align-items: center; gap: 8px;
@@ -199,9 +198,23 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .kpi-grid { grid-template-columns: 1fr 1fr !important; }
+  .nav-mobile-btn { display: flex !important; }
+  .nav-desktop    { display: none !important; }
+
   .dashboard-wrap { grid-template-columns: 1fr !important; }
-  .sidebar { display: none !important; }
+  .dashboard-wrap aside { display: none !important; }
+
+  .hero-grid,
+  .features-grid-3,
+  .features-grid-2,
+  .stats-grid,
+  .insight-grid { grid-template-columns: 1fr !important; }
+
+  .roi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  section, .section-pad { padding: 1rem !important; }
+
+  .kpi-grid { grid-template-columns: 1fr 1fr !important; }
   .feat-grid, .feat-grid-2 { grid-template-columns: 1fr !important; }
   .hero-stats { grid-template-columns: 1fr !important; }
   .reco-card { grid-template-columns: 1fr !important; }

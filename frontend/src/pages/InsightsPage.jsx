@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar.jsx";
 import { config } from "../config.js";
 
@@ -40,7 +41,8 @@ function BarChart({ data, valueKey, labelKey, color, maxVal }) {
   );
 }
 
-export default function InsightsPage({ currentPage, onNavigate }) {
+export default function InsightsPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(null);
@@ -64,7 +66,7 @@ export default function InsightsPage({ currentPage, onNavigate }) {
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "940px" }}>

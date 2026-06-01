@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { sidebarNav } from '../data/index.js';
 
 function SidebarItem({ icon, label, iconBg, active, onClick }) {
@@ -43,7 +44,10 @@ function SidebarSection({ label, children }) {
   );
 }
 
-export default function Sidebar({ currentPage, onNavigate }) {
+export default function Sidebar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   return (
     <aside style={{
       background: 'var(--bg2)',
@@ -59,8 +63,8 @@ export default function Sidebar({ currentPage, onNavigate }) {
             icon={item.icon}
             label={item.label}
             iconBg={item.iconBg}
-            active={currentPage === item.page}
-            onClick={() => item.page && onNavigate(item.page)}
+            active={location.pathname === item.route}
+            onClick={() => item.route && navigate(item.route)}
           />
         ))}
       </SidebarSection>
@@ -72,8 +76,8 @@ export default function Sidebar({ currentPage, onNavigate }) {
             icon={item.icon}
             label={item.label}
             iconBg={item.iconBg}
-            active={currentPage === item.page}
-            onClick={() => item.page && onNavigate(item.page)}
+            active={location.pathname === item.route}
+            onClick={() => item.route && navigate(item.route)}
           />
         ))}
       </SidebarSection>
@@ -85,8 +89,8 @@ export default function Sidebar({ currentPage, onNavigate }) {
             icon={item.icon}
             label={item.label}
             iconBg={item.iconBg}
-            active={currentPage === item.page}
-            onClick={() => item.page && onNavigate(item.page)}
+            active={location.pathname === item.route}
+            onClick={() => item.route && navigate(item.route)}
           />
         ))}
       </SidebarSection>

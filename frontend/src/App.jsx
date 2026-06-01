@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './styles/global.css';
-import { config } from './config.js';
 
+import { AppProvider, useApp } from './context/AppContext.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Navbar from './components/Navbar.jsx';
+
 import LandingPage from './pages/LandingPage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Campaign from './pages/Campaign.jsx';
@@ -19,179 +22,59 @@ import RealCreatorsPage from './pages/RealCreatorsPage.jsx';
 import CreatorProfile from './pages/CreatorProfile.jsx';
 import TrendRanking from './pages/TrendRanking.jsx';
 import CreatorCorner from './pages/CreatorCorner.jsx';
+import NotFound from './pages/NotFound.jsx';
 
-function Toast({ message, onDone }) {
-  React.useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t); }, []);
-  return <div className="toast">✓ {message}</div>;
+function ToastContainer() {
+  const { toasts } = useApp();
+  if (toasts.length === 0) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: '24px', right: '24px',
+      zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '8px',
+    }}>
+      {toasts.map(t => (
+        <div key={t.id} className="toast">✓ {t.msg}</div>
+      ))}
+    </div>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <>
+      <Navbar />
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/"                 element={<LandingPage />} />
+          <Route path="/dashboard"        element={<Dashboard />} />
+          <Route path="/campaign"         element={<Campaign />} />
+          <Route path="/recommendations"  element={<Recommendations />} />
+          <Route path="/viral-lab"        element={<ViralLab />} />
+          <Route path="/ai-agent"         element={<AIAgent />} />
+          <Route path="/authenticity"     element={<AuthenticityPage />} />
+          <Route path="/growth-engine"    element={<GrowthEnginePage />} />
+          <Route path="/brand-match"      element={<BrandMatchPage />} />
+          <Route path="/shortlist"        element={<ShortlistPage />} />
+          <Route path="/preferences"      element={<PreferencesPage />} />
+          <Route path="/insights"         element={<InsightsPage />} />
+          <Route path="/real-creators"    element={<RealCreatorsPage />} />
+          <Route path="/trend-ranking"    element={<TrendRanking />} />
+          <Route path="/creator-profile"  element={<CreatorProfile />} />
+          <Route path="/creator-corner"   element={<CreatorCorner />} />
+          <Route path="*"                 element={<NotFound />} />
+        </Routes>
+      </ErrorBoundary>
+      <ToastContainer />
+    </>
+  );
 }
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState('landing');
-  const [campaignMeta, setCampaignMeta] = useState(null);
-  const [recos, setRecos] = useState([]);
-  const [insights, setInsights] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [selectedCreator, setSelectedCreator] = useState(null);
-  const [lastFormData, setLastFormData] = useState(null);
-
-  const showToast = (msg) => { setToast(msg); };
-  const hideToast = () => setToast(null);
-
-  const navigate = (page, data = null) => {
-    if (page === 'creatorProfile' && data) setSelectedCreator(data);
-    setCurrentPage(page);
-    window.scrollTo(0, 0);
-  };
-
-  const handleCampaignSubmit = async (formData) => {
-    setLastFormData(formData);
-    setLoading(true);
-    setError(null);
-
-    const formatBudget = (v) => '₹' + parseInt(v).toLocaleString('en-IN');
-    setCampaignMeta({
-      cats: formData.selectedCategories.join(', ') || 'General',
-      budget: formatBudget(formData.budget),
-      budgetRaw: formData.budget,
-      ageGroup: formData.ageGroup,
-    });
-
-    try {
-      const campaignText = `Brand/Product: ${formData.brand || 'General Product'}. Campaign: ${formData.name || 'General Campaign'}. Goal: ${formData.goal}. Target Audience: ${formData.audience || `Audience aged ${formData.ageGroup}`}. Niche category focus: ${formData.selectedCategories.join(', ')}.`;
-      
-      const response = await fetch(config.api.endpoints.match, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          campaign_text: campaignText,
-          campaign_goal: formData.goal,
-          category_filters: formData.selectedCategories,
-          min_authenticity: formData.minAuth,
-          tier_filter: formData.tier,
-          min_engagement_rate: formData.minEr,
-          excluded_brands: formData.excludedBrands,
-          top_k: 3
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setRecos(data.recommendations);
-      setInsights(data.insights);
-      setCurrentPage('recommendations');
-    } catch (err) {
-      console.error("Failed to fetch matches:", err);
-      setError("AI analysis failed. No live recommendations were loaded.");
-      setRecos([]);
-      setInsights([]);
-      setCurrentPage('recommendations');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <>
-      <Navbar currentPage={currentPage} onNavigate={navigate} />
-
-      {currentPage === 'landing' && (
-        <LandingPage onNavigate={navigate} />
-      )}
-      {currentPage === 'dashboard' && (
-        <Dashboard currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'campaign' && (
-        <Campaign onNavigate={navigate} onCampaignSubmit={handleCampaignSubmit} initialForm={lastFormData} />
-      )}
-      {currentPage === 'recommendations' && (
-        <Recommendations
-          campaignMeta={campaignMeta}
-          recos={recos}
-          insights={insights}
-          onNavigate={navigate}
-          onToast={showToast}
-          hasLastForm={!!lastFormData}
-        />
-      )}
-      {currentPage === 'viralLab' && (
-        <ViralLab onNavigate={navigate} />
-      )}
-      {currentPage === 'aiAgent' && (
-        <AIAgent onNavigate={navigate} />
-      )}
-      {currentPage === 'authenticity' && (
-        <AuthenticityPage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'growthEngine' && (
-        <GrowthEnginePage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'brandMatch' && (
-        <BrandMatchPage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'shortlist' && (
-        <ShortlistPage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'preferences' && (
-        <PreferencesPage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'insights' && (
-        <InsightsPage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'realCreators' && (
-        <RealCreatorsPage currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'trendRanking' && (
-        <TrendRanking currentPage={currentPage} onNavigate={navigate} />
-      )}
-      {currentPage === 'creatorCorner' && (
-        <CreatorCorner onNavigate={navigate} />
-      )}
-      {currentPage === 'creatorProfile' && (
-        <CreatorProfile
-          creator={selectedCreator}
-          onNavigate={navigate}
-          onBack={() => navigate('dashboard')}
-        />
-      )}
-
-      {toast && <Toast message={toast} onDone={hideToast} />}
-
-      {loading && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 9999,
-          background: 'rgba(11, 13, 15, 0.9)',
-          backdropFilter: 'blur(12px)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          gap: '1.5rem',
-          animation: 'fadeIn 0.3s ease-out'
-        }}>
-          <div style={{
-            width: '60px',
-            height: '60px',
-            borderRadius: '50%',
-            border: '4px solid rgba(200, 240, 104, 0.1)',
-            borderTopColor: 'var(--accent)',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', letterSpacing: '-0.02em', fontWeight: 600 }}>
-            Analyzing Creator Ecosystem...
-          </div>
-          <p style={{ color: 'var(--text2)', fontSize: '14px', maxWidth: '380px', textAlign: 'center', lineHeight: 1.6 }}>
-            Our RandomForest growth engines and XGBoost safety models are evaluating 5,000 profiles for authenticity, virality, and category relevance.
-          </p>
-        </div>
-      )}
-    </>
+    <BrowserRouter>
+      <AppProvider>
+        <AppRoutes />
+      </AppProvider>
+    </BrowserRouter>
   );
 }

@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar.jsx";
 
 const FEATURES = [
@@ -18,11 +19,12 @@ const FEATURES = [
 
 const TYPE_COLOR = { Core: "var(--accent)", Rolling: "var(--blue)", Lag: "var(--gold)", Derived: "var(--coral)" };
 
-export default function GrowthEnginePage({ currentPage, onNavigate }) {
+export default function GrowthEnginePage() {
+  const navigate = useNavigate();
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "860px" }}>

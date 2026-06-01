@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar.jsx";
 
 function ScoreBar({ value, color }) {
@@ -12,7 +13,8 @@ function ScoreBar({ value, color }) {
   );
 }
 
-export default function ShortlistPage({ currentPage, onNavigate }) {
+export default function ShortlistPage() {
+  const navigate = useNavigate();
   const [shortlist, setShortlist] = useState([]);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export default function ShortlistPage({ currentPage, onNavigate }) {
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "860px" }}>
@@ -86,7 +88,7 @@ export default function ShortlistPage({ currentPage, onNavigate }) {
                 <div style={{ fontSize: "14px", color: "var(--text2)", marginBottom: "1.5rem" }}>
                   Run a campaign and click "Shortlist" on recommended creators to save them here.
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => onNavigate("campaign")}>
+                <button className="btn btn-primary btn-sm" onClick={() => navigate("/campaign")}>
                   Start a Campaign
                 </button>
               </div>

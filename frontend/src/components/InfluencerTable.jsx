@@ -1,6 +1,6 @@
 import React from 'react';
 
-const COL = '2fr 1fr 1fr 1fr 1fr 1fr 1fr';
+const COL = 'minmax(180px,2fr) 90px 90px 95px 80px 120px 64px';
 
 function scoreClass(s) {
   return s >= 85 ? 'score-s' : s >= 75 ? 'score-a' : s >= 65 ? 'score-b' : 'score-c';
@@ -17,8 +17,9 @@ function TableHeader() {
       padding: '12px 16px', borderBottom: '1px solid var(--border)',
       fontSize: '11px', letterSpacing: '.05em', textTransform: 'uppercase',
       color: 'var(--text3)', fontFamily: 'var(--font-mono)',
+      minWidth: '720px',
     }}>
-      {cols.map(c => <div key={c}>{c}</div>)}
+      {cols.map(c => <div key={c} style={{ whiteSpace: 'nowrap' }}>{c}</div>)}
     </div>
   );
 }
@@ -33,11 +34,11 @@ function TableRow({ influencer, onClick }) {
         display: 'grid', gridTemplateColumns: COL,
         padding: '14px 16px', borderBottom: '1px solid var(--border)',
         alignItems: 'center', transition: 'background .15s', cursor: 'pointer',
+        minWidth: '720px',
       }}
       onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
     >
-      {/* Influencer info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{
           width: '36px', height: '36px', borderRadius: '50%',
@@ -96,7 +97,7 @@ export default function InfluencerTable({ data, onCreatorClick }) {
   }
 
   return (
-    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflowX: 'auto' }}>
       <div style={{ padding: '8px 16px 6px', fontSize: '11px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--border)' }}>
         Click any creator to see their virality score →
       </div>

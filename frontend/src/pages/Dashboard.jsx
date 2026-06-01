@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { config } from '../config.js';
 import Sidebar from '../components/Sidebar.jsx';
 import KPIGrid from '../components/KPIGrid.jsx';
@@ -6,7 +7,8 @@ import SearchBar from '../components/SearchBar.jsx';
 import InfluencerTable from '../components/InfluencerTable.jsx';
 import { influencers as fallbackData } from '../data/index.js';
 
-export default function Dashboard({ currentPage, onNavigate }) {
+export default function Dashboard() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [allCreators, setAllCreators] = useState([]);
@@ -60,7 +62,7 @@ export default function Dashboard({ currentPage, onNavigate }) {
   return (
     <div style={{ paddingTop: '56px' }}>
       <div className="dashboard-wrap" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', minHeight: 'calc(100vh - 56px)' }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: '2rem', overflowY: 'auto' }}>
           <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -103,7 +105,7 @@ export default function Dashboard({ currentPage, onNavigate }) {
           ) : (
             <InfluencerTable
               data={filtered}
-              onCreatorClick={creator => onNavigate('creatorProfile', creator)}
+              onCreatorClick={creator => navigate('/creator-profile', { state: { creator } })}
             />
           )}
         </main>

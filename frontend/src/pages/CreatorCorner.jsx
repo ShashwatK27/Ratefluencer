@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
 
@@ -57,7 +58,8 @@ function MatchCard({ campaign, idx }) {
   );
 }
 
-export default function CreatorCorner({ onNavigate }) {
+export default function CreatorCorner() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     name: "", handle: "", niche: "Beauty",
     followers: "", engagement_rate: "",
@@ -107,7 +109,7 @@ export default function CreatorCorner({ onNavigate }) {
     <div style={{ paddingTop: "56px", minHeight: "100vh" }}>
       <div style={{ maxWidth: "860px", margin: "0 auto", padding: "3rem 2rem" }}>
 
-        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("landing")} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate("/")} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
           ← Home
         </button>
 

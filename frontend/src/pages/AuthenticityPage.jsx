@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar.jsx";
 
 const FEATURES = [
@@ -22,11 +23,12 @@ const THRESHOLDS = [
 
 const WEIGHT_COLOR = { High: "var(--coral)", Medium: "var(--gold)", Low: "var(--blue)" };
 
-export default function AuthenticityPage({ currentPage, onNavigate }) {
+export default function AuthenticityPage() {
+  const navigate = useNavigate();
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "860px" }}>

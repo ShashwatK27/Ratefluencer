@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar.jsx";
 import { config } from "../config.js";
 
@@ -46,7 +47,8 @@ function CreatorRow({ creator, rank }) {
   );
 }
 
-export default function RealCreatorsPage({ currentPage, onNavigate }) {
+export default function RealCreatorsPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("instagram");
@@ -63,7 +65,7 @@ export default function RealCreatorsPage({ currentPage, onNavigate }) {
   return (
     <div style={{ paddingTop: "56px" }}>
       <div className="dashboard-wrap" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 56px)" }}>
-        <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
+        <Sidebar />
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <div style={{ maxWidth: "860px" }}>

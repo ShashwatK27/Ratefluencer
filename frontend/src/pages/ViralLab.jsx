@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
 import ReelAssets from "../components/ReelAssets.jsx";
@@ -33,9 +34,11 @@ function FeedbackBar({ contentKey, result }) {
   const handleVote = (v) => {
     setVote(v);
     localStorage.setItem(storageKey, v);
-    // Store feedback for "learning from engagement" demo
     const history = JSON.parse(localStorage.getItem('ratefluencer_feedback') || '[]');
-    history.push({ key: contentKey, vote: v, ts: Date.now(), virality: result?.virality_score });
+    history.push({
+      key: contentKey, vote: v, ts: Date.now(), virality: result?.virality_score,
+      content: { hook: result?.hook, caption: result?.caption, hashtags: result?.hashtags },
+    });
     localStorage.setItem('ratefluencer_feedback', JSON.stringify(history.slice(-50)));
   };
 
@@ -89,7 +92,8 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sun
 const HOURS = Array.from({length:24},(_,i) => ({ label: `${i}:00`, value: i }));
 const MEDIA_TYPES = ["reel","image","carousel","video"];
 
-export default function ViralLab({ onNavigate }) {
+export default function ViralLab() {
+  const navigate = useNavigate();
   const [platform, setPlatform] = useState("instagram");
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Inspirational");
@@ -193,7 +197,7 @@ export default function ViralLab({ onNavigate }) {
       <div style={{ maxWidth: "780px", margin: "0 auto", padding: "3rem 2rem" }}>
 
         <div style={{ marginBottom: "3rem" }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('landing')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')} style={{ marginBottom: "1.5rem", fontSize: "13px" }}>
             ← Home
           </button>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>Viral Content Lab</h2>
