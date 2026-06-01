@@ -167,9 +167,17 @@ class ContentQualityScorer:
                 import json
                 with open(yt_bank_path, encoding='utf-8') as f:
                     yt_bank = json.load(f)
-                # Merge: YouTube data takes priority, hand-curated fills gaps
-                merged = {**_REFERENCE_BANK, **yt_bank}
-                logger.info(f"ContentQualityScorer using YouTube reference bank ({len(yt_bank)} categories)")
+                # FIX: hand-curated Instagram-style examples take PRIORITY.
+                # YouTube titles are in a different style (short, keyword-dense)
+                # and lower cosine similarity to Instagram captions.
+                # We blend: hand-curated first (8 examples) + YouTube top-4 as extras.
+                merged = {}
+                for cat in set(list(_REFERENCE_BANK.keys()) + list(yt_bank.keys())):
+                    hc  = _REFERENCE_BANK.get(cat, [])
+                    yt  = yt_bank.get(cat, [])
+                    # Hand-curated leads; YouTube supplements with up to 4 extra titles
+                    merged[cat] = hc + [t for t in yt[:4] if t not in hc]
+                logger.info(f"ContentQualityScorer: hand-curated + YouTube blend ({len(merged)} categories)")
                 for cat, examples in merged.items():
                     if examples:
                         self._index[cat] = self._model.encode(
@@ -214,17 +222,23 @@ class ContentQualityScorer:
 
         # Use mean of top-3 similarities (robust, not swayed by single outlier)
         top3_mean = float(np.mean(sorted(sims, reverse=True)[:3]))
-        # Scale: typical good content hits ~0.65 similarity; excellent is ~0.80
-        # Map 0.45-0.80 -> 30-100
-        raw_score = (top3_mean - 0.40) / 0.40 * 70 + 30
+
+        # Calibrated scale based on observed cosine similarity ranges:
+        #   0.20 = generic / unrelated content (score 0)
+        #   0.40 = decent content in the right category (score 50)
+        #   0.60 = strong content matching viral patterns (score 100)
+        # Formula: (sim - 0.20) / 0.40 * 100  -- linear mapping over [0.20, 0.60]
+        SIM_LOW  = 0.20   # anything at/below this scores 0
+        SIM_HIGH = 0.60   # anything at/above this scores 100
+        raw_score = (top3_mean - SIM_LOW) / (SIM_HIGH - SIM_LOW) * 100
         score     = int(max(0, min(100, raw_score)))
 
-        grade = 'A' if score >= 80 else 'B' if score >= 65 else 'C' if score >= 50 else 'D'
+        grade = 'A' if score >= 80 else 'B' if score >= 60 else 'C' if score >= 40 else 'D'
         interpretation = {
             'A': 'Highly similar to proven viral content in this category',
-            'B': 'Above average — strong content with viral potential',
-            'C': 'Average quality — consider a stronger hook or more specific value',
-            'D': 'Low similarity — content may be too generic or off-category',
+            'B': 'Strong content with good viral potential',
+            'C': 'Decent content — sharpen the hook or add more specific value',
+            'D': 'Low similarity to viral patterns — consider rewriting',
         }[grade]
 
         return {

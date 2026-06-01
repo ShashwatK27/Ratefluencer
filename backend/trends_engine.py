@@ -3,10 +3,28 @@ Trend Engine  -  real-time trend signals from Google Trends + Reddit + YouTube.
 Falls back gracefully on rate limits or network errors.
 """
 import os
+import math
 import time
 import logging
 import requests as _requests
 from typing import List, Dict
+
+# ── urllib3 2.x compatibility patch for pytrends ──────────────────────────────
+# pytrends uses Retry(method_whitelist=...) which was renamed to allowed_methods
+# in urllib3 2.0.  This one-time patch makes both parameter names work so pytrends
+# doesn't need to be modified or downgraded.
+try:
+    from urllib3.util.retry import Retry as _Retry
+    if not getattr(_Retry.__init__, '_compat_patched', False):
+        _orig_retry_init = _Retry.__init__
+        def _compat_retry_init(self, *args, **kwargs):
+            if 'method_whitelist' in kwargs:
+                kwargs.setdefault('allowed_methods', kwargs.pop('method_whitelist'))
+            _orig_retry_init(self, *args, **kwargs)
+        _compat_retry_init._compat_patched = True
+        _Retry.__init__ = _compat_retry_init
+except Exception:
+    pass
 
 def _get_yt_key() -> str:
     k = os.environ.get('YOUTUBE_API_KEY', '')
@@ -61,15 +79,27 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
 
 
 def _bucket_scores(current: float, week_mean: float, week_max: float) -> Dict:
-    velocity = min(100, int((current / max(week_mean, 1)) * 50))
-    saturation = min(100, int((week_max / 100) * 100))
-    novelty = max(0, 100 - saturation)
-    trend_score = min(100, int(current * 0.5 + velocity * 0.3 + novelty * 0.2))
+    # velocity: how far above the week average is current interest
+    # (current/mean)*60 maps:  at average->60,  2x average->100 (capped)
+    velocity = min(100, int((current / max(week_mean, 1)) * 60))
+
+    # novelty: is the topic at its weekly peak right now?
+    # Higher current vs max = it's peaking NOW = genuinely trending
+    range_   = max(week_max - week_mean, 1)
+    novelty  = min(100, max(0, int((current - week_mean) / range_ * 100)))
+
+    # trend_score: weighted combination on full 0-100 scale
+    # current_interest already 0-100 from Google (100 = peak of period)
+    trend_score = min(100, int(
+        current  * 0.40 +
+        velocity * 0.35 +
+        novelty  * 0.25
+    ))
     return {
         'current_interest': int(current),
-        'growth_velocity': velocity,
-        'novelty': novelty,
-        'trend_score': trend_score,
+        'growth_velocity':  velocity,
+        'novelty':          novelty,
+        'trend_score':      trend_score,
     }
 
 
@@ -182,10 +212,12 @@ def fetch_reddit_trends(category: str) -> List[Dict]:
                 comments  = int(d.get('num_comments', 0))
                 upvote_r  = float(d.get('upvote_ratio', 0.8))
 
-                # Normalize to 0-100
-                velocity  = min(100, int(score / 500))
-                novelty   = min(100, int(comments / 50 * 10 + 40))
-                trend_sc  = min(100, int(velocity * 0.5 + novelty * 0.3 + upvote_r * 20))
+                # Log10 scaling: 100 upvotes=40, 1K=60, 10K=80, 100K=100
+                velocity  = min(100, int(math.log10(max(score, 1)) * 20))
+                # Engagement depth: comments relative to upvotes
+                comment_ratio = comments / max(score, 1)
+                engagement = min(100, int(comment_ratio * 500 + upvote_r * 50))
+                trend_sc  = min(100, int(velocity * 0.5 + engagement * 0.3 + upvote_r * 20))
 
                 # Deduplicate by topic prefix
                 key = title[:40].lower()
@@ -307,11 +339,10 @@ def fetch_youtube_search_trends(category: str, geo: str = 'IN') -> List[Dict]:
             views    = int(stats.get('viewCount',    0))
             likes    = int(stats.get('likeCount',    0))
             comments = int(stats.get('commentCount', 0))
-
-            velocity    = min(100, int(views / 200_000))
+            velocity    = min(100, int(math.log10(max(views, 1)) * 14))
             eng_rate    = (likes + comments) / max(views, 1)
-            engagement  = min(100, int(eng_rate * 5000))
-            trend_score = min(100, int(velocity * 0.5 + engagement * 0.3 + 75 * 0.2))
+            engagement  = min(100, int(eng_rate * 2000))
+            trend_score = min(100, int(velocity * 0.45 + engagement * 0.30 + 80 * 0.25))
 
             results.append({
                 'topic':            title[:80],
@@ -481,14 +512,14 @@ def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
                     continue
 
                 # Compute scores from real data
-                # velocity: how many millions of views (capped at 100)
-                velocity = min(100, int(views / 500_000))
-                # engagement: like + comment rate on views
-                eng_rate  = (likes + comments) / max(views, 1)
-                engagement = min(100, int(eng_rate * 5000))
-                # novelty: recently trending = high novelty proxy
-                novelty   = 75
-                trend_score = min(100, int(velocity * 0.5 + engagement * 0.3 + novelty * 0.2))
+                # Log10 velocity: 100K=75, 1M=90, 10M=100
+                velocity   = min(100, int(math.log10(max(views, 1)) * 15))
+                # Engagement: like+comment rate -- typical YT like rate 2-5%
+                eng_rate   = (likes + comments) / max(views, 1)
+                engagement = min(100, int(eng_rate * 2000))
+                # Being on mostPopular = actively trending right now
+                novelty    = 85
+                trend_score = min(100, int(velocity * 0.45 + engagement * 0.30 + novelty * 0.25))
 
                 results.append({
                     'topic':            title[:80],
@@ -498,7 +529,7 @@ def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
                     'growth_velocity':  velocity,
                     'engagement_score': engagement,
                     'novelty':          novelty,
-                    'current_interest': min(100, int(views / 200_000)),
+                    'current_interest': min(100, int(math.log10(max(views, 1)) * 14)),
                     'audience_fit':     min(100, 55 + trend_score // 4),
                     'source':           'YouTube Trending (Data API)',
                     'why_trending':     (

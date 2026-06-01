@@ -200,11 +200,43 @@ if lgb_best is not None:
 best_rmse, best_model, best_name, best_r2 = min(contestants, key=lambda x: x[0])
 print(f"\n  Winner: {best_name}  (RMSE={best_rmse:.4f}, R2={best_r2:.4f})")
 
-# -- Scaler: map predictions -> 0-100 -----------------------------------------
-all_raw = best_model.predict(X)
-log_preds = np.log1p(np.clip(all_raw - all_raw.min(), 0, None)).reshape(-1, 1)
-scaler = MinMaxScaler(feature_range=(0, 100))
-scaler.fit(log_preds)
+# -- Scaler: fit on 33K PROXY predictions so it's calibrated for production ----
+# The 33K influencer dataset uses proxy features (derived from ER, followers)
+# that produce systematically different raw predictions than the YouTube
+# training data.  Fitting the scaler on 33K proxy predictions ensures the
+# 0-100 range is correct for what the API actually serves.
+from sklearn.preprocessing import QuantileTransformer
+
+# Build 33K proxy predictions for scaler calibration
+_df33_cal = pd.read_csv(BACKEND / 'influencers_engine_ready.csv').fillna(0)
+_proxy_records = []
+for _, row in _df33_cal.sample(min(5000, len(_df33_cal)), random_state=42).iterrows():
+    followers = float(row.get('followers', 10000))
+    er        = float(row.get('engagement_rate', 3.0))
+    if er < 1.0: er *= 100
+    likes     = float(row.get('likes',    max(1.0, followers*er/100*0.9)))
+    comments  = float(row.get('comments', max(1.0, followers*er/100*0.1)))
+    shares    = float(row.get('shares',   max(1.0, comments*0.5)))
+    reach     = float(row.get('reach',    max(1.0, likes*12.0)))
+    net_g     = float(max(0.01, followers*er/100*0.08))
+    v_avg     = max(0.001, reach/30.0)
+    total_eng = max(1.0, likes+comments+shares)
+    _proxy_records.append([
+        v_avg, likes/30, comments/30, shares/30, er,
+        net_g, likes/total_eng, comments/total_eng, shares/total_eng,
+        net_g/v_avg, net_g*0.98, net_g*0.95, net_g*0.90,
+        net_g, max(0.01, net_g*0.03), net_g*0.01,
+    ])
+_X_proxy   = np.array(_proxy_records)
+_raw_proxy = best_model.predict(_X_proxy)
+
+scaler = QuantileTransformer(output_distribution='uniform', random_state=42)
+scaler.fit(_raw_proxy.reshape(-1, 1))
+
+# Verify range on proxy data
+_cal_scores = scaler.transform(_raw_proxy.reshape(-1, 1)).flatten() * 100
+print(f"Score distribution calibrated on 33K proxy data:")
+print(f"  min={_cal_scores.min():.1f}  max={_cal_scores.max():.1f}  mean={_cal_scores.mean():.1f}  std={_cal_scores.std():.1f}")
 
 # -- Feature importance --------------------------------------------------------
 print("\nTop feature importances:")
@@ -242,10 +274,9 @@ def build_growth_features(row):
         net_g, max(0.01, net_g*0.03), net_g*0.01,
     ]
 
-X33     = np.array([build_growth_features(r) for r in df33.to_dict('records')])
-raw33   = best_model.predict(X33)
-log33   = np.log1p(np.clip(raw33 - all_raw.min(), 0, None)).reshape(-1, 1)
-scores  = np.clip(scaler.transform(log33).flatten(), 0, 100)
+X33    = np.array([build_growth_features(r) for r in df33.to_dict('records')])
+raw33  = best_model.predict(X33)
+scores = np.clip(scaler.transform(raw33.reshape(-1, 1)).flatten() * 100, 0, 100)
 
 corr = np.corrcoef(scores, df33['growth_score'])[0, 1]
 print(f"\nNew model vs CSV growth_score:")

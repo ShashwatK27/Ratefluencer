@@ -145,12 +145,18 @@ class GrowthPredictor:
             raw_prediction = self.model.predict(input_df)[0]
             raw_prediction = float(max(0, raw_prediction))  # Clip at 0
             
-            # Transform to log scale
-            log_pred = np.log1p(raw_prediction)
-            
-            # Scale to 0-100
-            score = self.scaler.transform([[log_pred]])[0][0]
-            score = float(max(0, min(100, score)))  # Clip to [0, 100]
+            # Scale to 0-100 using QuantileTransformer (rank-based, full range)
+            # Old scaler used log + MinMaxScaler which compressed range to 51-92.
+            # QuantileTransformer maps predictions to uniform [0,1] distribution
+            # then multiplied by 100 for a proper 0-100 spread.
+            try:
+                # QuantileTransformer path (new scaler from retrained model)
+                score = float(self.scaler.transform([[raw_prediction]])[0][0]) * 100
+            except Exception:
+                # Legacy MinMaxScaler path (old model pkl)
+                log_pred = np.log1p(raw_prediction)
+                score = float(self.scaler.transform([[log_pred]])[0][0])
+            score = float(max(0, min(100, score)))
             
             # Compute confidence (based on input variance)
             confidence = self._compute_confidence(creator_metrics)

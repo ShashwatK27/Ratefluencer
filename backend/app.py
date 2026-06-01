@@ -307,7 +307,12 @@ class CsvEngine:
         self.creators_df = pd.read_csv(creators_csv)
         self.brand_matcher = None
         self.growth_predictor = GrowthPredictor(model_version='v2', use_fallback=True)
-        self.authenticity_detector = AuthenticityDetector(model_version='v2')
+        # Use optimal threshold (0.585) from training metadata -- not the default 0.50
+        # The optimal threshold maximises F1; 0.50 causes false negatives on borderline cases
+        _auth_meta = joblib.load(BACKEND_DIR / 'authenticity_metadata_v2.pkl')
+        _opt_thresh = float(_auth_meta.get('optimal_threshold', 0.585))
+        self.authenticity_detector = AuthenticityDetector(model_version='v2', threshold=_opt_thresh)
+        logger.info(f"AuthenticityDetector loaded with optimal threshold={_opt_thresh:.3f}")
         try:
             from brand_matcher_v2 import BrandMatcher
             self.brand_matcher = BrandMatcher(creators_csv=creators_csv)
