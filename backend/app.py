@@ -204,6 +204,52 @@ def get_creator_name(creator_id, niche):
     return f"{first} {last}"
 
 
+# -- Niche canonical map: campaign filters -> dataset niche names ──────────────
+# Campaign category_filters use terms like 'Tech', 'Lifestyle', 'Wellness' that
+# don't exist as-is in the creator dataset. This map normalises them so filters
+# actually find matching creators instead of falling back to zero matches.
+NICHE_CANONICAL_MAP = {
+    # Direct synonyms
+    'technology':    'technology',
+    'tech':          'technology',
+    'gadgets':       'technology',
+    'gaming':        'gaming',
+    'esports':       'gaming',
+    'lifestyle':     'lifestyle',
+    'wellness':      'wellness',
+    'health':        'wellness',
+    'yoga':          'wellness',
+    'entertainment': 'entertainment',
+    'comedy':        'comedy',
+    'humour':        'comedy',
+    'humor':         'comedy',
+    'music':         'music',
+    'education':     'education',
+    'edtech':        'education',
+    'finance':       'finance',
+    'fintech':       'finance',
+    'investing':     'finance',
+    'photography':   'travel',   # photography creators overlap heavily with travel
+    'sports':        'fitness',
+    'pets':          'pet',      # fix plural typo used in campaigns
+    'pet':           'pet',
+    # Pass-throughs (already correct)
+    'beauty':        'beauty',
+    'fitness':       'fitness',
+    'food':          'food',
+    'travel':        'travel',
+    'fashion':       'fashion',
+    'family':        'family',
+    'interior':      'interior',
+    'home':          'interior',
+    'other':         'other',
+}
+
+def canonical_niche(n: str) -> str:
+    """Normalise any campaign category filter to the nearest dataset niche."""
+    return NICHE_CANONICAL_MAP.get(n.lower().strip(), 'other')
+
+
 # -- TF-IDF semantic brand matching -------------------------------------------
 _NICHE_EXPANSION = {
     'beauty':        'beauty skincare makeup glow serum cosmetic lipstick foundation moisturizer sunscreen blush eyeshadow toner',
@@ -819,7 +865,10 @@ def csv_recommendations(category_filters=None, min_auth_val=0, tier_min=0, tier_
     df = df[df['fake_account'] == 0]
 
     if category_filters:
-        wanted = {str(cat).lower() for cat in category_filters}
+        # Normalise campaign terms to dataset niche names via canonical map
+        wanted = {canonical_niche(str(cat)) for cat in category_filters}
+        # Also keep the raw lowercase term in case dataset was updated
+        wanted |= {str(cat).lower() for cat in category_filters}
         category_df = df[df['niche'].str.lower().isin(wanted)]
         if not category_df.empty:
             df = category_df
@@ -1015,7 +1064,10 @@ def match_creators():
         data = request.get_json() or {}
         campaign_text    = data.get("campaign_text", "")
         campaign_goal    = data.get("campaign_goal", "balanced")
-        category_filters = data.get("category_filters", [])
+        # Normalise category_filters through canonical map so 'Tech', 'Lifestyle',
+        # 'Wellness' etc. resolve to actual dataset niche names
+        raw_filters      = data.get("category_filters", [])
+        category_filters = [canonical_niche(c) for c in raw_filters]
         top_k            = int(data.get("top_k", 3))
 
         min_auth_str       = data.get("min_authenticity", "Any")
