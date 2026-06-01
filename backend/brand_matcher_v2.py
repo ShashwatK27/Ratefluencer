@@ -179,6 +179,19 @@ class BrandMatcher:
             return False
     
     def load_creators(self, csv_path: Optional[str] = None) -> int:
+        # Load pre-generated enriched profiles (niche-specific bios) if available.
+        # These replace the generic "Professional X creator..." text so ChromaDB
+        # embeddings actually reflect what each creator makes.
+        import json, pathlib
+        _enriched_profiles: dict = {}
+        _enrich_path = pathlib.Path(__file__).parent / 'creator_enriched_profiles.json'
+        if _enrich_path.exists():
+            try:
+                with open(_enrich_path, encoding='utf-8') as _f:
+                    _enriched_profiles = json.load(_f)
+                logger.info(f"Loaded {len(_enriched_profiles):,} enriched creator profiles for ChromaDB")
+            except Exception as _e:
+                logger.warning(f"Could not load enriched profiles: {_e}")
         """
         Load creators from CSV file with enhanced text representation for vector indexing.
         
@@ -221,14 +234,22 @@ class BrandMatcher:
                 followers = row.get('followers', 0)
                 er = row.get('engagement_rate', 0.0)
                 
-                # Adapt to bio column
+                # Load enriched bio from generated profiles if available,
+                # else fall back to column or generic default.
+                cid_key = str(int(row.get('creator_id', idx)))
+                if _enriched_profiles and cid_key in _enriched_profiles:
+                    # Use the fully enriched document directly (includes bio + tier + ER)
+                    enriched_documents.append(_enriched_profiles[cid_key])
+                    creator_bios.append(_enriched_profiles[cid_key])
+                    continue   # skip the generic doc below
+
                 if 'bio' in row and pd.notna(row['bio']):
                     bio = str(row['bio'])
                 else:
                     bio = f"Professional {category} creator sharing content and engaging with a dedicated community."
-                
+
                 creator_bios.append(bio)
-                
+
                 # Compound text representations allow query to match on niche, bio details, and tier keywords
                 tier = row.get('tier', "Nano" if followers < 10000 else "Micro" if followers < 100000 else "Macro" if followers < 1000000 else "Mega")
                 doc = f"Category/Niche: {category}. Bio: {bio}. Followers: {followers:,} ({tier} creator). Engagement Rate: {er:.2%}."
