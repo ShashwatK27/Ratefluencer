@@ -31,10 +31,11 @@ class ViralPredictor:
         self.insights     = {}   # per-category stats from real data
         self.global_stats = {}   # platform-wide benchmarks
         # Trained classifier (optional  -  loaded if pkl exists)
-        self._clf      = None
-        self._le       = None
+        self._clf       = None
+        self._le        = None
         self._clf_feats = None
         self._encoders  = None
+        self._tfidf     = None   # TF-IDF vectorizer for v2 content-level model
         self._load_or_compute()
         self._load_classifier()
 
@@ -174,11 +175,34 @@ class ViralPredictor:
 
     # -- classifier helpers ----------------------------------------------------
     def _load_classifier(self):
-        clf_pkl  = BACKEND_DIR / 'viral_clf_v1.pkl'
-        le_pkl   = BACKEND_DIR / 'viral_label_encoder_v1.pkl'
-        feat_pkl = BACKEND_DIR / 'viral_features_v1.pkl'
-        enc_pkl  = BACKEND_DIR / 'viral_encoders_v1.pkl'
-        if not all(p.exists() for p in [clf_pkl, le_pkl, feat_pkl, enc_pkl]):
+        # Prefer v2 (content-level YouTube model) over v1 (influencer-level model)
+        v2_files = [BACKEND_DIR / f'viral_clf_v2.pkl',
+                    BACKEND_DIR / 'viral_label_encoder_v2.pkl',
+                    BACKEND_DIR / 'viral_features_v2.pkl',
+                    BACKEND_DIR / 'viral_encoders_v2.pkl']
+        v1_files = [BACKEND_DIR / f'viral_clf_v1.pkl',
+                    BACKEND_DIR / 'viral_label_encoder_v1.pkl',
+                    BACKEND_DIR / 'viral_features_v1.pkl',
+                    BACKEND_DIR / 'viral_encoders_v1.pkl']
+
+        # Load TF-IDF vectorizer for v2 if available
+        tfidf_pkl = BACKEND_DIR / 'viral_tfidf_v2.pkl'
+        if tfidf_pkl.exists():
+            try:
+                self._tfidf = joblib.load(tfidf_pkl)
+                logger.info("Viral TF-IDF vectorizer loaded")
+            except Exception:
+                self._tfidf = None
+        else:
+            self._tfidf = None
+
+        if all(p.exists() for p in v2_files):
+            clf_pkl, le_pkl, feat_pkl, enc_pkl = v2_files
+            model_version = 'v2 (YouTube content-level + TF-IDF)'
+        elif all(p.exists() for p in v1_files):
+            clf_pkl, le_pkl, feat_pkl, enc_pkl = v1_files
+            model_version = 'v1 (influencer behavioral)'
+        else:
             logger.info("Viral classifier not found  -  run train_viral_model.py to enable ML scoring")
             return
         try:
@@ -186,7 +210,7 @@ class ViralPredictor:
             self._le        = joblib.load(le_pkl)
             self._clf_feats = joblib.load(feat_pkl)
             self._encoders  = joblib.load(enc_pkl)
-            logger.info(f"Viral classifier loaded ({len(self._clf_feats)} features, {len(self._le.classes_)} classes)")
+            logger.info(f"Viral classifier loaded {model_version} ({len(self._clf_feats)} features, {len(self._le.classes_)} classes)")
         except Exception as e:
             logger.warning(f"Failed to load viral classifier: {e}")
 
@@ -203,8 +227,27 @@ class ViralPredictor:
         reach       = float(features.get('reach',       max(1.0, likes * 12.0)))
         impressions = float(features.get('impressions', max(1.0, reach * 1.5)))
 
-        # No engagement_rate or er_ratio -- model uses behavioral signals only
+        # v2 content-level features (pre-publish signals from caption/script)
+        caption   = str(features.get('caption', features.get('content', '')))
+        title_txt = str(features.get('reel_idea', caption))
+        import re as _re
         _derived = {
+            # v2 content-level features
+            'title_length':      float(len(title_txt)),
+            'title_word_count':  float(len(title_txt.split())),
+            'has_number':        float(bool(_re.search(r'\d', title_txt))),
+            'has_question':      float('?' in title_txt),
+            'has_exclamation':   float('!' in title_txt),
+            'title_caps_ratio':  sum(1 for c in title_txt if c.isupper()) / max(len(title_txt), 1),
+            'tag_count':         float(len(str(features.get('hashtags', '')).split())),
+            'desc_length':       float(len(caption)),
+            'publish_hour':      float(features.get('post_hour', 18)),
+            'publish_day':       float(features.get('day_of_week_num',
+                                       {'Monday':0,'Tuesday':1,'Wednesday':2,'Thursday':3,
+                                        'Friday':4,'Saturday':5,'Sunday':6}.get(
+                                        str(features.get('day_of_week','Wednesday')), 2))),
+            'duration_sec':      float(features.get('duration', 30)),
+            # v1 influencer behavioral features (fallback)
             'share_rate':         shares   / max(follower_count, 1),
             'likes_per_f':        likes    / max(follower_count, 1),
             'comments_per_f':     comments / max(follower_count, 1),
@@ -214,9 +257,22 @@ class ViralPredictor:
             'authenticity_score': float(features.get('authenticity_score', 75.0)),
         }
 
+        # Build TF-IDF vector from title/caption text (v2 feature block)
+        tfidf_vec: dict = {}
+        if self._tfidf is not None:
+            title_text = str(features.get('reel_idea', features.get('caption', '')))
+            try:
+                arr = self._tfidf.transform([title_text]).toarray()[0]
+                for i, val in enumerate(arr):
+                    tfidf_vec[f'tfidf_{self._tfidf.get_feature_names_out()[i]}'] = float(val)
+            except Exception:
+                pass
+
         row = []
         for feat in self._clf_feats:
-            if feat in _derived:
+            if feat in tfidf_vec:
+                row.append(tfidf_vec[feat])
+            elif feat in _derived:
                 row.append(_derived[feat])
             elif feat == 'niche_enc':
                 enc = self._encoders.get('niche')

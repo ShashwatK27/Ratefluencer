@@ -160,6 +160,26 @@ class ContentQualityScorer:
             logger.warning(f"ContentQualityScorer failed to load: {e}")
 
     def _build_index(self):
+        # Prefer real YouTube reference bank if it exists (built by collect_youtube_data.py)
+        yt_bank_path = Path(__file__).parent / 'yt_reference_bank.json'
+        if yt_bank_path.exists():
+            try:
+                import json
+                with open(yt_bank_path, encoding='utf-8') as f:
+                    yt_bank = json.load(f)
+                # Merge: YouTube data takes priority, hand-curated fills gaps
+                merged = {**_REFERENCE_BANK, **yt_bank}
+                logger.info(f"ContentQualityScorer using YouTube reference bank ({len(yt_bank)} categories)")
+                for cat, examples in merged.items():
+                    if examples:
+                        self._index[cat] = self._model.encode(
+                            examples[:20], batch_size=16, show_progress_bar=False
+                        )
+                return
+            except Exception as e:
+                logger.warning(f"YouTube reference bank load failed, using hand-curated: {e}")
+
+        # Fallback: hand-curated reference bank
         for cat, examples in _REFERENCE_BANK.items():
             self._index[cat] = self._model.encode(
                 examples, batch_size=16, show_progress_bar=False

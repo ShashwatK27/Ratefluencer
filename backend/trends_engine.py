@@ -1,11 +1,23 @@
 """
-Trend Engine  -  real-time trend signals from Google Trends + Reddit.
+Trend Engine  -  real-time trend signals from Google Trends + Reddit + YouTube.
 Falls back gracefully on rate limits or network errors.
 """
+import os
 import time
 import logging
 import requests as _requests
 from typing import List, Dict
+
+def _get_yt_key() -> str:
+    k = os.environ.get('YOUTUBE_API_KEY', '')
+    return k if k and k != 'your_youtube_api_key_here' else ''
+
+def _record_yt_units(units: int):
+    pass   # no-op without key rotator
+
+# Simple in-memory cache for YouTube Search results (TTL = 1 hour).
+# search.list costs 100 units; caching means one call per category per hour.
+_yt_search_cache: Dict[str, dict] = {}   # key -> {'ts': float, 'results': List[Dict]}
 
 logger = logging.getLogger(__name__)
 
@@ -203,65 +215,345 @@ def fetch_reddit_trends(category: str) -> List[Dict]:
     return results[:5]
 
 
-def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
-    """
-    Fetch trending YouTube videos via the public Atom RSS feed  -  no API key required.
-    Extracts trending topic keywords from video titles.
-    """
-    url = f"https://www.youtube.com/feeds/videos.xml?chart=mostpopular&regionCode={geo}&hl=en_IN"
-    headers = {'User-Agent': 'ratefluencer-trends/1.0'}
+# Categories that share category_id=26 (Howto & Style) need a text search
+# instead of category filter because Indian content mixes all styles together.
+_YT_SEARCH_QUERIES: Dict[str, str] = {
+    'Beauty':    'skincare makeup beauty tutorial india',
+    'Fitness':   'workout fitness gym yoga exercise india',
+    'Fashion':   'fashion outfit style ootd clothing india',
+    'Food':      'recipe food cooking street food india',
+    'Travel':    'travel vlog india destination trip explore',
+    'Finance':   'investing money stock mutual fund SIP india finance',
+    'Business':  'startup entrepreneur business marketing india',
+    'Lifestyle': 'morning routine lifestyle vlog india self care',
+    'Family':    'family vlog parenting kids india',
+    'Interior':  'home decor room makeover interior design india',
+    'Pet':       'dog cat pet care india cute',
+}
+# Cache TTL = 6 hours to stay within 10,000 free quota/day.
+# 11 Search categories x 101 units x 4 refreshes/day = 4,444 units -- safe.
+_YT_SEARCH_TTL = 21600
 
-    CATEGORY_FILTER = {
-        'Technology':  ['AI', 'tech', 'gadget', 'phone', 'software', 'app', 'robot', 'cyber', 'GPT'],
-        'Finance':     ['money', 'invest', 'stock', 'crypto', 'bank', 'profit', 'earn', 'finance'],
-        'Fitness':     ['workout', 'gym', 'fitness', 'diet', 'yoga', 'weight', 'exercise', 'health'],
-        'Food':        ['recipe', 'food', 'cook', 'eat', 'restaurant', 'taste', 'biryani', 'snack'],
-        'Travel':      ['travel', 'trip', 'tour', 'India', 'road', 'explore', 'place', 'vlog'],
-        'Comedy':      ['funny', 'comedy', 'laugh', 'prank', 'joke', 'meme', 'roast'],
-        'Music':       ['song', 'music', 'album', 'artist', 'remix', 'Bollywood', 'cover'],
-        'Business':    ['startup', 'business', 'entrepreneur', 'marketing', 'brand', 'growth'],
-        'Beauty':      ['makeup', 'skincare', 'beauty', 'hair', 'glow', 'routine', 'skin'],
-        'Fashion':     ['fashion', 'outfit', 'style', 'dress', 'clothing', 'trend', 'look'],
-        'Gaming':      ['game', 'gaming', 'play', 'esports', 'stream', 'level', 'battle'],
-    }
-    keywords = CATEGORY_FILTER.get(category, [])
+
+def fetch_youtube_search_trends(category: str, geo: str = 'IN') -> List[Dict]:
+    """
+    Use YouTube Search API (search.list) to find trending category-specific
+    videos in India.  Costs 100 quota units per call -- results cached 1 hour.
+
+    Only called for categories that share category_id=26 (Beauty, Fitness, etc.)
+    where videos.list cannot distinguish between them.
+    """
+    api_key = _get_yt_key()
+    if not api_key:
+        return []
+
+    query = _YT_SEARCH_QUERIES.get(category)
+    if not query:
+        return []   # category doesn't need search (has its own category_id)
+
+    # Return cached results if fresh
+    cache_key = category + '_' + geo
+    cached = _yt_search_cache.get(cache_key)
+    if cached and (time.time() - cached['ts']) < _YT_SEARCH_TTL:
+        logger.debug(f"YouTube Search cache hit for '{category}'")
+        return cached['results']
 
     try:
-        resp = _requests.get(url, headers=headers, timeout=8)
+        import datetime
+        since = (datetime.datetime.utcnow() - datetime.timedelta(days=30)).strftime('%Y-%m-%dT00:00:00Z')
+
+        params = {
+            'part':          'snippet',
+            'q':             query,
+            'type':          'video',
+            'order':         'viewCount',
+            'regionCode':    geo,
+            'publishedAfter': since,
+            'maxResults':    8,
+            'key':           api_key,
+        }
+        resp = _requests.get(
+            'https://www.googleapis.com/youtube/v3/search',
+            params=params, timeout=10,
+        )
+        resp.raise_for_status()
+        _record_yt_units(100)   # search.list = 100 units
+        items = resp.json().get('items', [])
+
+        # Fetch statistics for the returned video IDs (1 extra unit)
+        video_ids = [i['id']['videoId'] for i in items if i.get('id', {}).get('videoId')]
+        stats_map: Dict[str, dict] = {}
+        if video_ids:
+            stats_resp = _requests.get(
+                'https://www.googleapis.com/youtube/v3/videos',
+                params={'part': 'statistics', 'id': ','.join(video_ids), 'key': api_key},
+                timeout=8,
+            )
+            if stats_resp.status_code == 200:
+                _record_yt_units(1)   # videos.list = 1 unit
+                for v in stats_resp.json().get('items', []):
+                    stats_map[v['id']] = v.get('statistics', {})
+
+        results = []
+        for item in items:
+            vid_id  = item.get('id', {}).get('videoId', '')
+            snippet = item.get('snippet', {})
+            title   = snippet.get('title', '').strip()
+            channel = snippet.get('channelTitle', '')
+            if not title:
+                continue
+
+            stats    = stats_map.get(vid_id, {})
+            views    = int(stats.get('viewCount',    0))
+            likes    = int(stats.get('likeCount',    0))
+            comments = int(stats.get('commentCount', 0))
+
+            velocity    = min(100, int(views / 200_000))
+            eng_rate    = (likes + comments) / max(views, 1)
+            engagement  = min(100, int(eng_rate * 5000))
+            trend_score = min(100, int(velocity * 0.5 + engagement * 0.3 + 75 * 0.2))
+
+            results.append({
+                'topic':            title[:80],
+                'keyword':          title[:40],
+                'channel':          channel,
+                'trend_score':      trend_score,
+                'growth_velocity':  velocity,
+                'engagement_score': engagement,
+                'novelty':          80,
+                'current_interest': min(100, int(views / 100_000)),
+                'audience_fit':     min(100, 60 + trend_score // 4),
+                'source':           'YouTube Search (Data API)',
+                'why_trending':     f"{views/1_000_000:.1f}M views . {likes/1000:.0f}K likes on YouTube India",
+                'data_backed':      True,
+                'real_time':        True,
+            })
+            if len(results) >= 3:
+                break
+
+        results.sort(key=lambda x: x['trend_score'], reverse=True)
+        # Cache the result
+        _yt_search_cache[cache_key] = {'ts': time.time(), 'results': results}
+        logger.info(f"YouTube Search API: {len(results)} results for '{category}' (cached 1h)")
+        return results
+
+    except Exception as e:
+        logger.warning(f"YouTube Search API failed for '{category}': {e}")
+        return []
+
+
+# YouTube Data API v3: category ID mapping for mostPopular chart
+# https://developers.google.com/youtube/v3/docs/videoCategories
+# Note: some category IDs return 404 for specific regionCodes (e.g. Travel=19 in IN).
+# fetch_youtube_trends() auto-retries without category_id on 404.
+_YT_CATEGORY_IDS: Dict[str, str] = {
+    'Technology':    '28',   # Science & Technology
+    'Gaming':        '20',   # Gaming
+    'Music':         '10',   # Music
+    'Comedy':        '23',   # Comedy
+    'Entertainment': '24',   # Entertainment
+    'Sports':        '17',   # Sports
+    'Beauty':        '26',   # Howto & Style
+    'Fashion':       '26',   # Howto & Style
+    'Fitness':       '26',   # Howto & Style
+    'Food':          '26',   # Howto & Style
+    'Business':      '22',   # People & Blogs
+    'Finance':       '22',   # People & Blogs
+    'Education':     '27',   # Education
+    # Travel (19) intentionally omitted — returns 404 for IN region;
+    # handled via keyword filter on general trending feed instead.
+}
+
+# Keyword filter: narrows category_id=26 (Howto & Style) and general trending
+# into niche-specific content. Broad enough to catch Indian content styles.
+_YT_KEYWORD_FILTER: Dict[str, List[str]] = {
+    'Fitness':   ['workout', 'gym', 'fitness', 'yoga', 'exercise', 'weight', 'diet',
+                  'health', 'body', 'training', 'muscle', 'fat', 'calories', 'run'],
+    'Beauty':    ['makeup', 'skincare', 'beauty', 'glow', 'hair', 'routine', 'skin',
+                  'foundation', 'lipstick', 'moisturizer', 'serum', 'look', 'tutorial',
+                  'get ready', 'grwm', 'transformation', 'brow', 'lash', 'face'],
+    'Fashion':   ['fashion', 'outfit', 'style', 'dress', 'clothing', 'ootd', 'trend',
+                  'wear', 'haul', 'saree', 'ethnic', 'kurta', 'wardrobe', 'fit'],
+    'Food':      ['recipe', 'food', 'cook', 'restaurant', 'biryani', 'snack', 'chef',
+                  'eat', 'taste', 'kitchen', 'dish', 'street food', 'vlog', 'bake',
+                  'thali', 'curry', 'dessert', 'review', 'mukbang'],
+    'Travel':    ['travel', 'trip', 'tour', 'india', 'vlog', 'explore', 'place',
+                  'visit', 'destination', 'road', 'hotel', 'beach', 'mountain',
+                  'goa', 'kerala', 'rajasthan', 'himachal', 'manali', 'kashmir'],
+    'Business':  ['startup', 'entrepreneur', 'business', 'marketing', 'growth',
+                  'revenue', 'passive income', 'side hustle', 'earn', 'profit'],
+    'Finance':   ['invest', 'money', 'stock', 'crypto', 'mutual fund', 'sip',
+                  'finance', 'saving', 'portfolio', 'nifty', 'sensex', 'tax'],
+    'Lifestyle': ['morning routine', 'day in my life', 'vlog', 'productivity',
+                  'self care', 'routine', 'minimalism', 'home', 'decor'],
+}
+
+
+def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
+    """
+    Fetch trending YouTube videos using YouTube Data API v3 (primary)
+    or the public Atom RSS feed (fallback when YOUTUBE_API_KEY is not set).
+
+    Primary path  (requires YOUTUBE_API_KEY in backend/.env):
+        GET https://www.googleapis.com/youtube/v3/videos
+            ?part=snippet,statistics
+            &chart=mostPopular
+            &regionCode=IN
+            &maxResults=10
+            &videoCategoryId={id}   # optional category filter
+            &key={YOUTUBE_API_KEY}
+
+    Returns trend dicts with real view/like/comment counts and computed scores.
+    Falls back to RSS silently if the API key is missing or the call fails.
+    """
+    api_key = _get_yt_key()
+
+    # ── YouTube Data API v3 (real statistics, auto-rotating keys) ─────────────
+    if api_key:
+        # For categories that share category_id=26 (Howto & Style), use
+        # Search API with a text query for accurate category-specific results.
+        if category in _YT_SEARCH_QUERIES:
+            search_results = fetch_youtube_search_trends(category, geo)
+            if search_results:
+                return search_results
+            # Search failed -- fall through to videos.list below
+
+        try:
+            category_id = _YT_CATEGORY_IDS.get(category, '')
+            params: Dict = {
+                'part':       'snippet,statistics',
+                'chart':      'mostPopular',
+                'regionCode': geo,
+                'maxResults': 10,
+                'key':        api_key,
+            }
+            if category_id:
+                params['videoCategoryId'] = category_id
+
+            resp = _requests.get(
+                'https://www.googleapis.com/youtube/v3/videos',
+                params=params, timeout=10,
+            )
+            # 404 means this category_id is unavailable for the regionCode.
+            if resp.status_code == 404 and 'videoCategoryId' in params:
+                logger.debug(f"YouTube category {params['videoCategoryId']} not available for {geo} -- retrying")
+                params_retry = {k: v for k, v in params.items() if k != 'videoCategoryId'}
+                resp = _requests.get(
+                    'https://www.googleapis.com/youtube/v3/videos',
+                    params=params_retry, timeout=10,
+                )
+            resp.raise_for_status()
+            _record_yt_units(1)   # videos.list = 1 unit
+            items = resp.json().get('items', [])
+
+            kw_filter = _YT_KEYWORD_FILTER.get(category, [])
+
+            # Parse all items, then apply keyword filter.
+            # Graceful fallback: if no items match the keywords (e.g. Indian Howto
+            # content uses different terms), use top unfiltered results so the
+            # function never returns [] from a successful API call.
+            def _score_item(item):
+                s  = item.get('snippet', {})
+                st = item.get('statistics', {})
+                return {
+                    'title':   s.get('title', '').strip(),
+                    'channel': s.get('channelTitle', ''),
+                    'views':   int(st.get('viewCount',    0)),
+                    'likes':   int(st.get('likeCount',    0)),
+                    'comments':int(st.get('commentCount', 0)),
+                }
+
+            parsed   = [_score_item(i) for i in items if _score_item(i)['title']]
+            filtered = [p for p in parsed
+                        if not kw_filter or
+                        any(kw.lower() in p['title'].lower() for kw in kw_filter)]
+            candidates = filtered if filtered else parsed   # fall back to unfiltered
+
+            results = []
+            for p in candidates:
+                title    = p['title']
+                channel  = p['channel']
+                views    = p['views']
+                likes    = p['likes']
+                comments = p['comments']
+
+                if not title:
+                    continue
+
+                # Compute scores from real data
+                # velocity: how many millions of views (capped at 100)
+                velocity = min(100, int(views / 500_000))
+                # engagement: like + comment rate on views
+                eng_rate  = (likes + comments) / max(views, 1)
+                engagement = min(100, int(eng_rate * 5000))
+                # novelty: recently trending = high novelty proxy
+                novelty   = 75
+                trend_score = min(100, int(velocity * 0.5 + engagement * 0.3 + novelty * 0.2))
+
+                results.append({
+                    'topic':            title[:80],
+                    'keyword':          title[:40],
+                    'channel':          channel,
+                    'trend_score':      trend_score,
+                    'growth_velocity':  velocity,
+                    'engagement_score': engagement,
+                    'novelty':          novelty,
+                    'current_interest': min(100, int(views / 200_000)),
+                    'audience_fit':     min(100, 55 + trend_score // 4),
+                    'source':           'YouTube Trending (Data API)',
+                    'why_trending':     (
+                        f"{views/1_000_000:.1f}M views . "
+                        f"{likes/1000:.0f}K likes on YouTube India"
+                    ),
+                    'data_backed':      True,
+                    'real_time':        True,
+                })
+                if len(results) >= 3:
+                    break
+
+            if results:
+                results.sort(key=lambda x: x['trend_score'], reverse=True)
+                logger.info(f"YouTube Data API: {len(results)} trends for '{category}'")
+                return results
+
+        except Exception as e:
+            logger.warning(f"YouTube Data API failed for '{category}': {e} -- falling back to RSS")
+
+    # ── RSS fallback (no API key needed) ───────────────────────────────────────
+    rss_url = f"https://www.youtube.com/feeds/videos.xml?chart=mostpopular&regionCode={geo}&hl=en_IN"
+    kw_filter = _YT_KEYWORD_FILTER.get(category, [])
+    try:
+        resp = _requests.get(rss_url, headers={'User-Agent': 'ratefluencer-trends/1.0'}, timeout=8)
         if resp.status_code != 200:
             return []
 
         import xml.etree.ElementTree as ET
-        ns = {'atom': 'http://www.w3.org/2005/Atom'}
-        root = ET.fromstring(resp.content)
+        ns    = {'atom': 'http://www.w3.org/2005/Atom'}
+        root  = ET.fromstring(resp.content)
         entries = root.findall('atom:entry', ns)
 
         results = []
         for entry in entries[:20]:
             title_el = entry.find('atom:title', ns)
-            title = title_el.text.strip() if title_el is not None else ''
+            title    = title_el.text.strip() if title_el is not None else ''
             if not title:
                 continue
-
-            # Filter by category if keywords given
-            title_lower = title.lower()
-            if keywords and not any(kw.lower() in title_lower for kw in keywords):
+            if kw_filter and not any(kw.lower() in title.lower() for kw in kw_filter):
                 continue
 
-            # Rough trend score  -  YouTube trending = high interest
-            trend_score = 75 + (len(results) == 0) * 10  # first match gets slight boost
-
+            trend_score = 75 + (len(results) == 0) * 10
             results.append({
-                'topic':           title[:80],
-                'keyword':         title[:40],
-                'trend_score':     trend_score,
-                'growth_velocity': 70,
-                'novelty':         65,
+                'topic':            title[:80],
+                'keyword':          title[:40],
+                'trend_score':      trend_score,
+                'growth_velocity':  70,
+                'novelty':          65,
                 'current_interest': 80,
-                'audience_fit':    min(100, 55 + len(results) * 2),
-                'source':          'YouTube Trending',
-                'why_trending':    f"Currently trending on YouTube India",
-                'data_backed':     True,
+                'audience_fit':     min(100, 55 + len(results) * 2),
+                'source':           'YouTube Trending (RSS)',
+                'why_trending':     'Currently trending on YouTube India',
+                'data_backed':      True,
+                'real_time':        True,
             })
             if len(results) >= 3:
                 break
@@ -269,7 +561,7 @@ def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
         return results
 
     except Exception as e:
-        logger.debug(f"YouTube trends fetch failed: {e}")
+        logger.debug(f"YouTube RSS fallback failed: {e}")
         return []
 
 
