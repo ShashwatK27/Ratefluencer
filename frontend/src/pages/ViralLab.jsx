@@ -174,9 +174,10 @@ export default function ViralLab() {
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Inspirational");
   const [category, setCategory] = useState("Lifestyle");
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [result,       setResult]       = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [nlpScore,     setNlpScore]     = useState(null);   // content quality NLP score
 
   // Score My Caption state
   const [caption, setCaption] = useState("");
@@ -214,7 +215,21 @@ export default function ViralLab() {
         topic, tone, content_category: category,
         feedback_history: feedbackHistory,
       });
-      setResult(response.data);
+      const data = response.data;
+      setResult(data);
+
+      // Auto-score with NLP content quality scorer (non-blocking)
+      const textToScore = data.caption || data.reel_idea || data.hook || topic;
+      if (textToScore) {
+        fetch(config.api.endpoints.contentQuality, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: textToScore, category }),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.quality_score !== undefined) setNlpScore(d); })
+          .catch(() => {});
+      }
     } catch (err) {
       console.error(err);
       setError("Content generation failed. Please check the backend is running and try again.");
@@ -523,6 +538,23 @@ export default function ViralLab() {
 
         {result && (
           <div style={{ marginTop: "2.5rem" }}>
+
+            {/* NLP Content Quality Badge */}
+            {nlpScore && (
+              <div className="fade-up" style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", background: nlpScore.grade === 'A' ? "rgba(200,240,104,0.06)" : nlpScore.grade === 'B' ? "rgba(104,184,240,0.06)" : "rgba(240,200,104,0.06)", border: `1px solid ${nlpScore.grade === 'A' ? 'rgba(200,240,104,0.2)' : nlpScore.grade === 'B' ? 'rgba(104,184,240,0.2)' : 'rgba(240,200,104,0.2)'}`, borderRadius: "var(--radius-sm)", marginBottom: "10px" }}>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: "28px", color: nlpScore.grade === 'A' ? "var(--accent)" : nlpScore.grade === 'B' ? "var(--blue)" : "var(--gold)", lineHeight: 1 }}>
+                  {nlpScore.quality_score}
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                    NLP Content Quality (Grade {nlpScore.grade})
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text2)", marginTop: "2px" }}>{nlpScore.interpretation}</div>
+                  <div style={{ fontSize: "10px", color: "var(--text3)", marginTop: "1px", fontFamily: "var(--font-mono)" }}>{nlpScore.model}</div>
+                </div>
+              </div>
+            )}
+
             {/* Score strip */}
             <div className="fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "12px" }}>
               {[

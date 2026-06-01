@@ -33,6 +33,7 @@ from growth_predictor import GrowthPredictor
 from authenticity_detector import AuthenticityDetector
 from viral_predictor import ViralPredictor
 from trends_engine import fetch_google_trends, fetch_combined_trends
+from content_scorer import ContentQualityScorer
 from groq import Groq
 from dotenv import load_dotenv
 import requests as http_requests
@@ -154,7 +155,8 @@ _rf_scorer = None   # initialised after app setup
 
 logger.info("Initializing Ratefluencer AI Orchestrator inside Flask server...")
 logger.info(f"Using creators CSV from: {CREATORS_CSV}")
-viral_predictor = ViralPredictor()
+viral_predictor   = ViralPredictor()
+content_scorer    = ContentQualityScorer()   # lazy-loads SentenceTransformer on first call
 
 # -- Module-level creator name pools -----------------------------------------
 CREATOR_NAMES = [
@@ -2409,14 +2411,33 @@ def influencer_profile():
     """
     try:
         data = request.get_json() or {}
-        followers     = max(1, int(data.get("followers", 10000)))
-        er            = float(data.get("engagement_rate", 3.0))
-        niche         = str(data.get("niche", "lifestyle")).lower()
-        handle        = str(data.get("handle", "@creator")).strip()
-        posts         = int(data.get("posts", 0)) or int(followers / 50)
-        avg_likes     = float(data.get("avg_likes", 0)) or followers * (er / 100) * 0.9
-        avg_comments  = float(data.get("avg_comments", 0)) or followers * (er / 100) * 0.1
-        avg_shares    = float(data.get("avg_shares", 0)) or max(1.0, avg_comments * 0.5)
+        followers    = max(1, int(data.get("followers", 10000)))
+        niche        = str(data.get("niche", "lifestyle")).lower()
+        handle       = str(data.get("handle", "@creator")).strip()
+        posts        = int(data.get("posts", 0)) or int(followers / 50)
+
+        # Actual per-post counts are PRIMARY -- ER is DERIVED from them.
+        # If frontend sends avg_likes/comments, use those; else fall back to ER.
+        avg_likes    = float(data.get("avg_likes",    0))
+        avg_comments = float(data.get("avg_comments", 0))
+        avg_shares   = float(data.get("avg_shares",   0))
+
+        if avg_likes > 0:
+            # Derive ER from actual counts (not the other way round)
+            er = (avg_likes + avg_comments) / followers * 100
+        else:
+            # Legacy path: ER provided directly, estimate counts from it
+            er           = float(data.get("engagement_rate", 3.0))
+            avg_likes    = followers * (er / 100) * 0.9
+            avg_comments = followers * (er / 100) * 0.1
+
+        if avg_shares == 0:
+            avg_shares = max(1.0, avg_comments * 0.5)
+
+        # Per-follower behavioral rates (what the viral model uses)
+        share_rate_raw   = avg_shares   / max(followers, 1)
+        likes_per_f_raw  = avg_likes    / max(followers, 1)
+        comments_per_f_raw = avg_comments / max(followers, 1)
 
         # Individual signal scores
         eng_quality  = clamp(er * 8.0)
@@ -2437,12 +2458,32 @@ def influencer_profile():
 
         # Consistency proxy
         consistency  = clamp(min(100, posts / 5 * 10 + 30))
-        share_rate   = clamp((avg_shares / max(1, avg_likes)) * 100 * 5)
+        # Share rate from actual counts (not ER-derived)
+        share_rate   = clamp(share_rate_raw * 1000)   # scale 0-1 -> 0-100
+
+        # Virality signal from actual behavioral counts (not ER)
+        viral_features = {
+            'share_rate':         share_rate_raw,
+            'likes_per_f':        likes_per_f_raw,
+            'comments_per_f':     comments_per_f_raw,
+            'reach_ratio':        0.5,              # default when not available
+            'log_followers':      math.log1p(followers),
+            'posts':              float(posts),
+            'content_category':   niche,
+            'niche':              niche,
+            'growth_score':       growth_score,
+            'authenticity_score': auth_score,
+            'follower_count':     float(followers),
+            'engagement_rate':    er,               # kept for heuristic branch only
+        }
+        viral_res     = viral_predictor.predict(viral_features)
+        virality_score = viral_res['viral_score']
 
         # Ratefluencer composite
         rf_score = int(clamp(
-            eng_quality * 0.25 + growth_score * 0.25 + auth_score * 0.20
-            + all_cats[0]['match'] * 0.20 + consistency * 0.05 + share_rate * 0.05
+            eng_quality * 0.22 + growth_score * 0.22 + auth_score * 0.18
+            + all_cats[0]['match'] * 0.18 + virality_score * 0.12
+            + consistency * 0.05 + share_rate * 0.03
         ))
 
         tier = (
@@ -2453,13 +2494,14 @@ def influencer_profile():
             'Emerging'
         )
 
+        # Improvement tips using actual counts
         improvement_tips = []
         if er < 2.0:
-            improvement_tips.append({"signal": "Engagement", "msg": "Engagement rate below 2%  -  focus on call-to-action hooks and interactive stories."})
+            improvement_tips.append({"signal": "Engagement", "msg": f"Your computed ER is {er:.1f}%  -  aim for above 3% by using stronger hooks and interactive content."})
         if posts < 30:
             improvement_tips.append({"signal": "Consistency", "msg": f"Only {posts} posts detected  -  brands prefer 60+ posts showing content history."})
-        if avg_shares < avg_comments * 0.3:
-            improvement_tips.append({"signal": "Share Rate", "msg": "Share rate is low  -  add more save-worthy or shareable content formats."})
+        if share_rate_raw < likes_per_f_raw * 0.03:
+            improvement_tips.append({"signal": "Share Rate", "msg": f"Share rate ({share_rate_raw*100:.2f}% of followers) is low  -  create save-worthy educational or emotional content."})
         if followers < 10_000:
             improvement_tips.append({"signal": "Reach", "msg": "Below 10K followers. Consider niche micro-communities before pitching large brands."})
         if not improvement_tips:
@@ -2470,6 +2512,7 @@ def influencer_profile():
             "tier":               tier,
             "handle":             handle,
             "niche":              niche,
+            "computed_er":        round(er, 2),
             "scores": {
                 "brand_match":  all_cats[0]['match'],
                 "authenticity": int(auth_score),
@@ -2477,6 +2520,7 @@ def influencer_profile():
                 "engagement":   int(eng_quality),
                 "consistency":  int(consistency),
                 "share_rate":   int(share_rate),
+                "virality":     int(virality_score),
             },
             "top_categories":   all_cats[:3],
             "all_categories":   all_cats,
@@ -2881,6 +2925,38 @@ Return ONLY valid JSON:
 
     except Exception as e:
         logger.error(f"generate-video failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/content-quality", methods=["POST"])
+def content_quality():
+    """
+    NLP-based content quality scorer.
+    Measures semantic similarity to a curated reference bank of
+    high-performing content using SentenceTransformer embeddings.
+
+    Body: { content, category, compare_b? }
+    Returns: quality_score (0-100), grade (A-D), interpretation, model
+    """
+    try:
+        data      = request.get_json() or {}
+        content   = str(data.get("content", "")).strip()
+        category  = str(data.get("category", "General"))
+        compare_b = str(data.get("compare_b", "")).strip()
+
+        if not content:
+            return jsonify({"error": "content is required"}), 400
+
+        result = content_scorer.score(content, category)
+
+        if compare_b:
+            comparison = content_scorer.compare(content, compare_b, category)
+            result["comparison"] = comparison
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"content-quality failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 

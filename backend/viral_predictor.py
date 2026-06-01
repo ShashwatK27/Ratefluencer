@@ -192,39 +192,46 @@ class ViralPredictor:
 
     def _build_clf_input(self, features: dict) -> list:
         import math as _math
-        row = []
+
         follower_count = float(features.get('follower_count', 50000) or 50000)
         er             = float(features.get('engagement_rate', 3.0) or 3.0)
+        niche_key      = str(features.get('content_category', features.get('niche', 'Lifestyle')))
 
+        likes       = float(features.get('likes',       max(1.0, follower_count * er / 100 * 0.9)))
+        comments    = float(features.get('comments',    max(1.0, follower_count * er / 100 * 0.1)))
+        shares      = float(features.get('shares',      max(1.0, follower_count * er / 100 * 0.05)))
+        reach       = float(features.get('reach',       max(1.0, likes * 12.0)))
+        impressions = float(features.get('impressions', max(1.0, reach * 1.5)))
+
+        # No engagement_rate or er_ratio -- model uses behavioral signals only
+        _derived = {
+            'share_rate':         shares   / max(follower_count, 1),
+            'likes_per_f':        likes    / max(follower_count, 1),
+            'comments_per_f':     comments / max(follower_count, 1),
+            'reach_ratio':        reach    / max(impressions, 1),
+            'log_followers':      _math.log1p(follower_count),
+            'growth_score':       float(features.get('growth_score', 65.0)),
+            'authenticity_score': float(features.get('authenticity_score', 75.0)),
+        }
+
+        row = []
         for feat in self._clf_feats:
-            # -- Old IG-Analytics feature names --------------------------------
-            if feat == 'media_type_enc':
-                enc = self._encoders.get('media_type')
-                v = float(enc.transform([[str(features.get('media_type', 'reel'))]])[0][0]) if enc else 0.0
-            elif feat == 'day_of_week_enc':
-                enc = self._encoders.get('day_of_week')
-                v = float(enc.transform([[str(features.get('day_of_week', 'Wednesday'))]])[0][0]) if enc else 0.0
-            elif feat in ('category_enc', 'content_category_enc'):
-                enc = self._encoders.get('content_category')
-                v = float(enc.transform([[str(features.get('content_category', 'Lifestyle'))]])[0][0]) if enc else 0.0
-            # -- New 33K-dataset feature names --------------------------------
+            if feat in _derived:
+                row.append(_derived[feat])
             elif feat == 'niche_enc':
                 enc = self._encoders.get('niche')
-                niche = str(features.get('content_category', features.get('niche', 'Lifestyle'))).lower()
-                v = float(enc.transform([[niche]])[0][0]) if enc else 0.0
-            elif feat == 'log_followers':
-                v = float(_math.log1p(follower_count))
-            elif feat == 'share_rate':
-                shares = float(features.get('shares', max(1.0, follower_count * er / 100 * 0.1)))
-                v = shares / max(follower_count, 1)
-            elif feat == 'growth_score':
-                v = float(features.get('growth_score', 65.0))
-            elif feat == 'authenticity_score':
-                v = float(features.get('authenticity_score', 75.0))
-            # -- Direct passthrough -------------------------------------------
+                row.append(float(enc.transform([[niche_key.lower()]])[0][0]) if enc else 0.0)
+            elif feat == 'media_type_enc':
+                enc = self._encoders.get('media_type')
+                row.append(float(enc.transform([[str(features.get('media_type', 'reel'))]])[0][0]) if enc else 0.0)
+            elif feat == 'day_of_week_enc':
+                enc = self._encoders.get('day_of_week')
+                row.append(float(enc.transform([[str(features.get('day_of_week', 'Wednesday'))]])[0][0]) if enc else 0.0)
+            elif feat in ('category_enc', 'content_category_enc'):
+                enc = self._encoders.get('content_category')
+                row.append(float(enc.transform([[str(features.get('content_category', 'Lifestyle'))]])[0][0]) if enc else 0.0)
             else:
-                v = float(features.get(feat, 0) or 0)
-            row.append(v)
+                row.append(float(features.get(feat, 0) or 0))
         return row
 
     # -- internal --------------------------------------------------------------

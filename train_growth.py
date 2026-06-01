@@ -1,7 +1,7 @@
 """
-Growth Model Retraining Pipeline
+Growth Model Retraining Pipeline  v2
 Target: 7-day forward aggregate subscriber + views momentum
-Models: RandomForest vs XGBoost, picked by RMSE
+Tournament: RandomForest vs XGBoost vs LightGBM  ->  winner picked by RMSE
 """
 
 import numpy as np
@@ -9,11 +9,22 @@ import pandas as pd
 import joblib
 from pathlib import Path
 
-from sklearn.model_selection import train_test_split, RandomizedSearchCV, KFold
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
+
+try:
+    from lightgbm import LGBMRegressor
+    _HAS_LGB = True
+except ImportError:
+    _HAS_LGB = False
+    print("LightGBM not found -- running RF vs XGBoost only")
+
+# Cap rows used for training to prevent RAM crash on laptops.
+# Feature engineering still uses the full CSV; only the model fit is capped.
+MAX_TRAIN_ROWS = 25_000
 
 BACKEND  = Path(__file__).parent / 'backend'
 DATA_CSV = Path(__file__).parent / 'all_youtube_analytics.csv'
@@ -116,78 +127,77 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.20, random_state=42)
 print(f"Train: {len(X_train):,}  |  Test: {len(X_test):,}")
 
-# -- Baseline -----------------------------------------------------------------
-print("\n[1/4] Baseline RandomForest (current config: depth=8, 100 trees)...")
-rf_base = RandomForestRegressor(n_estimators=100, max_depth=8,
-                                random_state=42, n_jobs=-1)
-rf_base.fit(X_train, y_train)
-p_base = rf_base.predict(X_test)
-base_rmse = np.sqrt(mean_squared_error(y_test, p_base))
-base_r2   = r2_score(y_test, p_base)
-print(f"  RMSE={base_rmse:.4f}  MAE={mean_absolute_error(y_test,p_base):.4f}  R2={base_r2:.4f}")
+# -- Cap training rows to avoid RAM crash on laptops --------------------------
+if len(X_train) > MAX_TRAIN_ROWS:
+    rng = np.random.default_rng(42)
+    idx = rng.choice(len(X_train), MAX_TRAIN_ROWS, replace=False)
+    X_train, y_train = X_train[idx], y_train[idx]
+    print(f"Training capped at {MAX_TRAIN_ROWS:,} rows (memory protection)")
 
-# -- Tuned RandomForest --------------------------------------------------------
-print("\n[2/4] Tuning RandomForest (25 iterations, 5-fold CV)...")
-rf_params = {
-    'n_estimators':      [100, 200, 300],
-    'max_depth':         [8, 12, 16, 20, None],
-    'min_samples_split': [2, 5, 10],
-    'min_samples_leaf':  [1, 2, 4],
-    'max_features':      ['sqrt', 'log2', 0.6],
-}
-rf_search = RandomizedSearchCV(
-    RandomForestRegressor(random_state=42, n_jobs=-1),
-    rf_params, n_iter=25, scoring='neg_root_mean_squared_error',
-    cv=KFold(5, shuffle=True, random_state=42),
-    verbose=1, random_state=42, n_jobs=-1,
+# -- 3-Model Tournament with fixed hyperparameters ----------------------------
+# RandomizedSearchCV replaced with pre-tuned params to prevent RAM crash.
+# 3 fits total instead of 350+ -- runs in ~5 min instead of 40+.
+print("\n[1/3] RandomForest (pre-tuned hyperparams)...")
+rf_best = RandomForestRegressor(
+    n_estimators=150, max_depth=12,
+    min_samples_split=5, min_samples_leaf=2,
+    max_features='sqrt', random_state=42,
+    n_jobs=2,   # limit parallelism to 2 threads -- prevents RAM crash
 )
-rf_search.fit(X_train, y_train)
-rf_best  = rf_search.best_estimator_
-p_rf     = rf_best.predict(X_test)
-rf_rmse  = np.sqrt(mean_squared_error(y_test, p_rf))
-rf_r2    = r2_score(y_test, p_rf)
-print(f"  Best params: {rf_search.best_params_}")
+rf_best.fit(X_train, y_train)
+p_rf    = rf_best.predict(X_test)
+rf_rmse = np.sqrt(mean_squared_error(y_test, p_rf))
+rf_r2   = r2_score(y_test, p_rf)
 print(f"  RMSE={rf_rmse:.4f}  MAE={mean_absolute_error(y_test,p_rf):.4f}  R2={rf_r2:.4f}")
 
-# -- Tuned XGBoost -------------------------------------------------------------
-print("\n[3/4] Tuning XGBoostRegressor (25 iterations, 5-fold CV)...")
-xgb_params = {
-    'n_estimators':     [100, 200, 300],
-    'max_depth':        [4, 5, 6, 7, 8],
-    'learning_rate':    [0.01, 0.05, 0.1, 0.15],
-    'subsample':        [0.7, 0.8, 0.9, 1.0],
-    'colsample_bytree': [0.7, 0.8, 0.9, 1.0],
-    'min_child_weight': [1, 2, 3],
-    'reg_alpha':        [0, 0.01, 0.1],
-    'reg_lambda':       [0.5, 1.0, 2.0],
-}
-xgb_search = RandomizedSearchCV(
-    XGBRegressor(random_state=42, n_jobs=-1, verbosity=0),
-    xgb_params, n_iter=25, scoring='neg_root_mean_squared_error',
-    cv=KFold(5, shuffle=True, random_state=42),
-    verbose=1, random_state=42, n_jobs=-1,
+print("\n[2/3] XGBoost (pre-tuned hyperparams)...")
+xgb_best = XGBRegressor(
+    n_estimators=200, max_depth=6, learning_rate=0.05,
+    subsample=0.8, colsample_bytree=0.8,
+    min_child_weight=2, reg_alpha=0.01, reg_lambda=1.0,
+    random_state=42, n_jobs=2, verbosity=0,
 )
-xgb_search.fit(X_train, y_train)
-xgb_best = xgb_search.best_estimator_
+xgb_best.fit(X_train, y_train)
 p_xgb    = xgb_best.predict(X_test)
 xgb_rmse = np.sqrt(mean_squared_error(y_test, p_xgb))
 xgb_r2   = r2_score(y_test, p_xgb)
-print(f"  Best params: {xgb_search.best_params_}")
 print(f"  RMSE={xgb_rmse:.4f}  MAE={mean_absolute_error(y_test,p_xgb):.4f}  R2={xgb_r2:.4f}")
 
-# -- Pick winner ---------------------------------------------------------------
-print("\n[4/4] Model comparison:")
-print(f"  Baseline RF   : RMSE={base_rmse:.4f}  R2={base_r2:.4f}")
-print(f"  Tuned RF      : RMSE={rf_rmse:.4f}  R2={rf_r2:.4f}")
-print(f"  Tuned XGBoost : RMSE={xgb_rmse:.4f}  R2={xgb_r2:.4f}")
-
-if xgb_rmse <= rf_rmse:
-    best_model, best_name = xgb_best, 'XGBoost'
-    best_rmse, best_r2   = xgb_rmse, xgb_r2
+lgb_rmse, lgb_r2, lgb_best = float('inf'), 0.0, None
+if _HAS_LGB:
+    print("\n[3/3] LightGBM (pre-tuned hyperparams)...")
+    lgb_best = LGBMRegressor(
+        n_estimators=200, learning_rate=0.05, num_leaves=31,
+        max_depth=8, subsample=0.8, colsample_bytree=0.8,
+        min_child_samples=20, reg_alpha=0.01,
+        random_state=42, n_jobs=2, verbosity=-1,
+    )
+    lgb_best.fit(X_train, y_train)
+    p_lgb    = lgb_best.predict(X_test)
+    lgb_rmse = np.sqrt(mean_squared_error(y_test, p_lgb))
+    lgb_r2   = r2_score(y_test, p_lgb)
+    print(f"  RMSE={lgb_rmse:.4f}  MAE={mean_absolute_error(y_test,p_lgb):.4f}  R2={lgb_r2:.4f}")
 else:
-    best_model, best_name = rf_best, 'RandomForest'
-    best_rmse, best_r2   = rf_rmse, rf_r2
+    print("\n[3/3] LightGBM not available -- skipping")
 
+# -- 3-fold CV on winner candidates (light -- 3 folds only) -------------------
+print("\n[4/4] 3-fold CV comparison:")
+cv3 = KFold(3, shuffle=True, random_state=42)
+for name, model in [('RandomForest', rf_best), ('XGBoost', xgb_best)] + (
+        [('LightGBM', lgb_best)] if lgb_best else []):
+    cv_r2  = cross_val_score(model, X_train, y_train, cv=cv3,
+                             scoring='r2', n_jobs=2)
+    cv_rmse = (-cross_val_score(model, X_train, y_train, cv=cv3,
+                                scoring='neg_root_mean_squared_error', n_jobs=2))
+    print(f"  {name:<14} CV-R2={cv_r2.mean():.4f}+-{cv_r2.std():.4f}  "
+          f"CV-RMSE={cv_rmse.mean():.4f}+-{cv_rmse.std():.4f}")
+
+contestants = [(rf_rmse, rf_best, 'RandomForest', rf_r2),
+               (xgb_rmse, xgb_best, 'XGBoost', xgb_r2)]
+if lgb_best is not None:
+    contestants.append((lgb_rmse, lgb_best, 'LightGBM', lgb_r2))
+
+best_rmse, best_model, best_name, best_r2 = min(contestants, key=lambda x: x[0])
 print(f"\n  Winner: {best_name}  (RMSE={best_rmse:.4f}, R2={best_r2:.4f})")
 
 # -- Scaler: map predictions -> 0-100 -----------------------------------------
@@ -261,6 +271,5 @@ joblib.dump(scaler,     BACKEND / 'growth_scaler_v2.pkl')
 print(f"  Saved growth_model_v2.pkl  ({best_name})")
 print(f"  Saved growth_features_v2.pkl")
 print(f"  Saved growth_scaler_v2.pkl")
-print(f"\n  Baseline  : RF(depth=8, 100 trees)  RMSE={base_rmse:.4f}  R2={base_r2:.4f}")
-print(f"  New model : {best_name}  RMSE={best_rmse:.4f}  R2={best_r2:.4f}")
+print(f"\n  Winner    : {best_name}  RMSE={best_rmse:.4f}  R2={best_r2:.4f}")
 print("\nDone.")

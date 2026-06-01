@@ -39,12 +39,46 @@ function ScoreBar({ label, value, color, desc }) {
   );
 }
 
+// SHAP horizontal bar chart rendered in pure SVG/div -- no external library
+function ShapChart({ title, explanations, color }) {
+  if (!explanations || explanations.length === 0) return null;
+  const maxAbs = Math.max(...explanations.map(e => Math.abs(e.shap_value)), 0.001);
+  return (
+    <div style={{ marginBottom: "12px" }}>
+      <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "8px" }}>{title}</div>
+      {explanations.map((e, i) => {
+        const pct   = Math.abs(e.shap_value) / maxAbs * 100;
+        const isPos = e.direction === "positive";
+        return (
+          <div key={i} style={{ marginBottom: "6px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+              <span style={{ fontSize: "11px", color: "var(--text2)" }}>{e.feature}</span>
+              <span style={{ fontSize: "10px", color: isPos ? "var(--accent)" : "var(--coral)", fontFamily: "var(--font-mono)" }}>
+                {isPos ? "+" : ""}{e.shap_value.toFixed(3)}
+              </span>
+            </div>
+            <div style={{ height: "4px", background: "var(--bg3)", borderRadius: "2px", overflow: "hidden" }}>
+              <div style={{
+                height: "4px", borderRadius: "2px",
+                width: `${pct}%`,
+                background: isPos ? "var(--accent)" : "var(--coral)",
+                transition: "width .6s ease",
+              }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CreatorProfile() {
   const navigate  = useNavigate();
   const location  = useLocation();
   const creator   = location.state?.creator;
 
   const [insights, setInsights] = useState(null);
+  const [shap,     setShap]     = useState(null);
 
   useEffect(() => {
     if (!creator?.cat) return;
@@ -57,6 +91,19 @@ export default function CreatorProfile() {
         ) || data.category_stats?.[0];
         setInsights({ catStat, hourly: data.hourly_distribution, daily: data.daily_distribution });
       })
+      .catch(() => {});
+  }, [creator]);
+
+  // Fetch SHAP feature explanations for this creator
+  useEffect(() => {
+    if (!creator?.id) return;
+    fetch(config.api.endpoints.explain, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator_id: creator.id }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.shap_available) setShap(d); })
       .catch(() => {});
   }, [creator]);
 
@@ -233,6 +280,36 @@ export default function CreatorProfile() {
             </div>
           </div>
         </div>
+
+        {/* SHAP Feature Importance */}
+        {shap && (
+          <div className="fade-up delay-3" style={{
+            background: "var(--bg2)", border: "1px solid var(--border)",
+            borderRadius: "var(--radius)", padding: "1.5rem", marginBottom: "1.5rem",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <div className="section-label">AI Explainability (SHAP)</div>
+              <span style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)", padding: "2px 8px", borderRadius: "10px", background: "var(--bg3)", border: "1px solid var(--border)" }}>
+                XGBoost TreeExplainer
+              </span>
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--text3)", marginBottom: "14px", lineHeight: 1.6 }}>
+              Feature contributions to this creator's scores. Green bars push the score <strong style={{ color: "var(--accent)" }}>higher</strong>, red bars push it <strong style={{ color: "var(--coral)" }}>lower</strong>.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+              <ShapChart
+                title="Authenticity Model"
+                explanations={shap.authenticity_explanation?.slice(0, 5)}
+                color="var(--blue)"
+              />
+              <ShapChart
+                title="Growth Model"
+                explanations={shap.growth_explanation?.slice(0, 5)}
+                color="var(--gold)"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Audience Demographics */}
         {creator.demographics && (

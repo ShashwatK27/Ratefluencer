@@ -34,6 +34,7 @@ export const config = {
       influencerProfile: `${API_URL}/api/influencer-profile`,
       roiEstimate:       `${API_URL}/api/roi-estimate`,
       explain:           `${API_URL}/api/explain`,
+      contentQuality:    `${API_URL}/api/content-quality`,
       feedback:          `${API_URL}/api/feedback`,
       feedbackHistory:   `${API_URL}/api/feedback/history`,
       agentLearn:        `${API_URL}/api/agent/learn`,

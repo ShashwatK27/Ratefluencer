@@ -17,6 +17,7 @@ const SCORE_BARS = [
   { key: 'authenticity', label: 'Authenticity',          color: 'var(--blue)'   },
   { key: 'growth',       label: 'Growth Momentum',       color: 'var(--gold)'   },
   { key: 'engagement',   label: 'Engagement Quality',    color: 'var(--accent)' },
+  { key: 'virality',     label: 'Viral Potential (ML)',  color: '#F068B8'       },
   { key: 'consistency',  label: 'Posting Consistency',   color: 'var(--purple)' },
   { key: 'share_rate',   label: 'Share Rate',            color: '#68D4F0'       },
 ];
@@ -44,24 +45,44 @@ function FormField({ label, children }) {
   );
 }
 
-const FORM_DEFAULT = { name: '', handle: '', niche: 'Fashion', followers: '', engagement_rate: '', posts: '', avg_shares: '', avg_likes: '', avg_comments: '' };
+const FORM_DEFAULT = {
+  name: '', handle: '', niche: 'Fashion',
+  followers: '', avg_likes: '', avg_comments: '',
+  avg_shares: '', posts: '',
+};
 
 export default function InfluencerPortal() {
-  const navigate              = useNavigate();
-  const onNavigate            = (path) => navigate('/' + path);
-  const [form, setForm]       = useState(FORM_DEFAULT);
-  const [result, setResult]   = useState(null);
+  const navigate   = useNavigate();
+  const onNavigate = (path) => navigate('/' + path);
+  const [form,    setForm]    = useState(FORM_DEFAULT);
+  const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
+  const [error,   setError]   = useState(null);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Auto-compute engagement rate from actual counts (shown as hint, not required)
+  const computedER = (() => {
+    const f = Number(form.followers) || 0;
+    const l = Number(form.avg_likes) || 0;
+    const c = Number(form.avg_comments) || 0;
+    if (!f) return null;
+    return ((l + c) / f * 100).toFixed(2);
+  })();
+
   const handleSubmit = async () => {
-    if (!form.followers || !form.engagement_rate) {
-      setError('Followers and Engagement Rate are required.'); return;
+    if (!form.followers || !form.avg_likes) {
+      setError('Followers and Avg Likes per Post are required.'); return;
     }
     setLoading(true); setError(null);
     try {
+      const followers    = Number(form.followers);
+      const avg_likes    = Number(form.avg_likes)    || 0;
+      const avg_comments = Number(form.avg_comments) || 0;
+      const avg_shares   = Number(form.avg_shares)   || 0;
+      // Derive ER from actual counts -- no manual ER input needed
+      const derived_er   = followers > 0 ? (avg_likes + avg_comments) / followers * 100 : 3.0;
+
       const res = await fetch(config.api.endpoints.influencerProfile, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,12 +90,13 @@ export default function InfluencerPortal() {
           name:            form.name || 'Creator',
           handle:          form.handle,
           niche:           form.niche.toLowerCase(),
-          followers:       Number(form.followers),
-          engagement_rate: Number(form.engagement_rate),
+          followers,
+          avg_likes,
+          avg_comments,
+          avg_shares,
           posts:           Number(form.posts) || 0,
-          avg_shares:      Number(form.avg_shares) || 0,
-          avg_likes:       Number(form.avg_likes) || 0,
-          avg_comments:    Number(form.avg_comments) || 0,
+          // Send derived ER so backend can use it where needed
+          engagement_rate: parseFloat(derived_er.toFixed(2)),
         }),
       });
       const data = await res.json();
@@ -109,6 +131,7 @@ export default function InfluencerPortal() {
         {/* Form */}
         <div className="shine-card" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '2rem', marginBottom: '2rem', overflow: 'hidden' }}>
           <div style={{ fontSize: '13px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '1.5rem' }}>Your Profile</div>
+          {/* Row 1: Identity */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
             <FormField label="Name / Brand">
               <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Priya Sharma" style={{ fontSize: '13px' }} />
@@ -121,24 +144,18 @@ export default function InfluencerPortal() {
                 {NICHES.map(n => <option key={n}>{n}</option>)}
               </select>
             </FormField>
-            <FormField label="Followers *">
-              <input type="number" value={form.followers} onChange={e => set('followers', e.target.value)} placeholder="e.g. 85000" style={{ fontSize: '13px' }} />
-            </FormField>
-            <FormField label="Engagement Rate % *">
-              <input type="number" step="0.1" value={form.engagement_rate} onChange={e => set('engagement_rate', e.target.value)} placeholder="e.g. 4.5" style={{ fontSize: '13px' }} />
-            </FormField>
-            <FormField label="Total Posts">
-              <input type="number" value={form.posts} onChange={e => set('posts', e.target.value)} placeholder="e.g. 320" style={{ fontSize: '13px' }} />
-            </FormField>
           </div>
 
-          {/* Optional advanced signals */}
-          <details style={{ marginBottom: '1.25rem' }}>
-            <summary style={{ fontSize: '12px', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'var(--font-mono)', letterSpacing: '.04em', userSelect: 'none' }}>
-              + ADD PER-POST AVERAGES (improves accuracy)
-            </summary>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
-              <FormField label="Avg Likes / Post">
+          {/* Row 2: Core counts (replaces ER -- actual counts give the model real signals) */}
+          <div style={{ padding: '12px 14px', background: 'rgba(200,240,104,0.04)', border: '1px solid rgba(200,240,104,0.15)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
+            <div style={{ fontSize: '11px', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '10px' }}>
+              Per-Post Averages * — model scores from actual counts, not engagement rate
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+              <FormField label="Followers *">
+                <input type="number" value={form.followers} onChange={e => set('followers', e.target.value)} placeholder="e.g. 85000" style={{ fontSize: '13px' }} />
+              </FormField>
+              <FormField label="Avg Likes / Post *">
                 <input type="number" value={form.avg_likes} onChange={e => set('avg_likes', e.target.value)} placeholder="e.g. 3200" style={{ fontSize: '13px' }} />
               </FormField>
               <FormField label="Avg Comments / Post">
@@ -147,8 +164,24 @@ export default function InfluencerPortal() {
               <FormField label="Avg Shares / Post">
                 <input type="number" value={form.avg_shares} onChange={e => set('avg_shares', e.target.value)} placeholder="e.g. 80" style={{ fontSize: '13px' }} />
               </FormField>
+              <FormField label="Total Posts">
+                <input type="number" value={form.posts} onChange={e => set('posts', e.target.value)} placeholder="e.g. 320" style={{ fontSize: '13px' }} />
+              </FormField>
+
+              {/* Auto-computed ER display */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '12px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', fontFamily: 'var(--font-mono)' }}>
+                  Computed ER (auto)
+                </label>
+                <div style={{ height: '38px', display: 'flex', alignItems: 'center', padding: '0 12px', borderRadius: '6px', background: 'var(--bg3)', border: '1px solid var(--border)', fontSize: '15px', fontFamily: 'var(--font-display)', color: computedER ? 'var(--accent)' : 'var(--text3)' }}>
+                  {computedER ? `${computedER}%` : '—'}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text3)' }}>
+                  (likes + comments) / followers
+                </div>
+              </div>
             </div>
-          </details>
+          </div>
 
           {error && (
             <div style={{ fontSize: '12px', color: 'var(--coral)', padding: '8px 12px', background: 'rgba(240,120,104,0.08)', borderRadius: '6px', border: '1px solid rgba(240,120,104,0.2)', marginBottom: '1rem' }}>
@@ -193,6 +226,11 @@ export default function InfluencerPortal() {
                   <span>.</span>
                   <span>{result.niche}</span>
                 </div>
+                {result.computed_er && (
+                  <div style={{ padding: '6px 14px', borderRadius: '20px', background: 'rgba(200,240,104,0.08)', border: '1px solid rgba(200,240,104,0.2)', fontSize: '12px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                    Computed ER: {result.computed_er}%
+                  </div>
+                )}
               </div>
 
               {/* Right: Score bars */}
