@@ -104,13 +104,19 @@ class _RatefluencerScorer:
         self.model    = None
         self.features = None
         self.encoders = None
+        _model_path = BACKEND_DIR / 'ratefluencer_model_v1.pkl'
+        _feat_path  = BACKEND_DIR / 'ratefluencer_features_v1.pkl'
+        _enc_path   = BACKEND_DIR / 'ratefluencer_encoders_v1.pkl'
+        if not (_model_path.exists() and _feat_path.exists() and _enc_path.exists()):
+            logger.info("Ratefluencer meta-learner pkls not found - run train_ratefluencer_score.py to enable")
+            return
         try:
-            self.model    = joblib.load(BACKEND_DIR / 'ratefluencer_model_v1.pkl')
-            self.features = joblib.load(BACKEND_DIR / 'ratefluencer_features_v1.pkl')
-            self.encoders = joblib.load(BACKEND_DIR / 'ratefluencer_encoders_v1.pkl')
-            logger.info("Ratefluencer meta-learner loaded")
+            self.model    = joblib.load(_model_path)
+            self.features = joblib.load(_feat_path)
+            self.encoders = joblib.load(_enc_path)
+            logger.info(f"Ratefluencer meta-learner loaded ({type(self.model).__name__}, {len(self.features)} features)")
         except Exception as e:
-            logger.warning(f"Meta-learner not found  -  using weighted formula: {e}")
+            logger.info(f"Meta-learner load issue (using weighted formula fallback): {type(e).__name__}: {e}")
 
     def predict(self, row: dict) -> float:
         """Predict composite Ratefluencer score from raw creator metrics."""
@@ -750,6 +756,48 @@ def semantic_brand_match(row, campaign_text, category_filters):
     return live_brand_match(row, campaign_text, category_filters)
 
 
+def detect_engagement_anomalies(row: dict) -> dict:
+    """
+    Heuristic detection of engagement pods and artificial spikes.
+
+    Pod detection:  comment/like ratio > 0.15 (bots post many short comments
+                    to inflate engagement without real likes).
+    Spike detection: ER > 3x the expected rate for the follower count
+                    (accounts buying engagement spikes get unnaturally high ER).
+    """
+    followers = float(row.get('followers', 10000))
+    er        = float(row.get('engagement_rate', 3.0))
+    likes     = float(row.get('likes', max(1.0, followers * er / 100 * 0.9)))
+    comments  = float(row.get('comments', max(1.0, followers * er / 100 * 0.1)))
+
+    # Comment/like ratio  (pods have high ratio — many short comments per like)
+    comment_like_ratio = comments / max(likes, 1)
+    pod_detected       = comment_like_ratio > 0.15
+
+    # Expected ER based on follower count (larger = lower organic ER)
+    # Benchmark: 1K followers -> ~8% ER, 1M followers -> ~2% ER
+    expected_er   = max(1.5, 8.0 - math.log10(max(followers, 1000)) * 1.5)
+    spike_detected = er > expected_er * 3.0
+
+    anomaly_score = 0
+    flags = []
+    if pod_detected:
+        anomaly_score += 40
+        flags.append(f"High comment/like ratio ({comment_like_ratio:.2f}) - possible engagement pod")
+    if spike_detected:
+        anomaly_score += 35
+        flags.append(f"ER {er:.1f}% is {er/expected_er:.1f}x expected ({expected_er:.1f}%) - possible spike")
+
+    return {
+        'pod_detected':        pod_detected,
+        'spike_detected':      spike_detected,
+        'comment_like_ratio':  round(comment_like_ratio, 3),
+        'expected_er':         round(expected_er, 1),
+        'anomaly_score':       anomaly_score,
+        'flags':               flags,
+    }
+
+
 def engagement_score(row):
     followers = float(row.get('followers', 0))
     er = float(row.get('engagement_rate', 0))
@@ -803,6 +851,10 @@ def generated_scores(row, campaign_text, category_filters, campaign_goal):
         final = ml_score * 0.60 + weighted_final * 0.40
     else:
         final = weighted_final
+
+    anomalies = detect_engagement_anomalies(row)
+    if anomalies['pod_detected'] or anomalies['spike_detected']:
+        final *= max(0.5, 1.0 - anomalies['anomaly_score'] / 200)
 
     if is_fake or risk_level == 'High':
         final *= 0.3
@@ -1043,6 +1095,14 @@ def search_creators():
                 "saves": int(saves_raw),
                 "saves_str": f"{int(saves_raw/1000)}K" if saves_raw >= 1000 else str(int(saves_raw)),
                 "demographics": get_audience_demographics(niche_key),
+                "posts": int(row.get('posts', 0)),
+                "posts_per_month": round(int(row.get('posts', 0)) / max(1, min(60, math.log10(max(followers_val, 1000)) * 8 + er_raw * 0.5)), 1),
+                "posting_consistency": (
+                    "Very Active" if int(row.get('posts', 0)) / max(1, min(60, math.log10(max(followers_val,1000))*8+er_raw*0.5)) >= 20 else
+                    "Active"       if int(row.get('posts', 0)) / max(1, min(60, math.log10(max(followers_val,1000))*8+er_raw*0.5)) >= 8  else
+                    "Moderate"     if int(row.get('posts', 0)) / max(1, min(60, math.log10(max(followers_val,1000))*8+er_raw*0.5)) >= 3  else
+                    "Infrequent"
+                ),
             })
 
         return jsonify({
@@ -1913,6 +1973,8 @@ def real_creators():
                 'real':      True,
                 'saves':     int(saves_val),
                 'saves_str': f"{int(saves_val/1000)}K" if saves_val >= 1000 else str(int(saves_val)),
+                'posts':     int(row.get('posts', 0)),
+                'posts_per_month': round(int(row.get('posts', 0)) / max(1, min(60, math.log10(max(followers_val,1000))*8+er*0.5)), 1),
                 'demographics': get_audience_demographics(niche_key),
             })
 
@@ -2314,9 +2376,59 @@ NICHE_DEMOGRAPHICS = {
 _DEFAULT_DEMO = {'18-24': 32, '25-34': 36, '35-44': 22, '45+': 10, 'female': 55, 'male': 45}
 
 
+# Cache: derive niche demographics from real CSV engagement distribution
+_NICHE_DEMO_CACHE: dict = {}
+
+def _build_demo_from_csv(niche: str) -> dict:
+    """
+    Derive audience demographics from actual CSV data.
+    Higher ER in niche -> younger audience (18-24 dominant).
+    Follower size distribution -> age skew.
+    Returns the same dict shape as NICHE_DEMOGRAPHICS.
+    """
+    try:
+        df_niche = engine.creators_df[engine.creators_df['niche'].str.lower() == niche.lower()]
+        if df_niche.empty:
+            return None
+
+        median_er  = float(df_niche['engagement_rate'].median())
+        median_flw = float(df_niche['followers'].median())
+
+        # Higher ER -> younger audience
+        er_youth_bonus = max(0, (median_er - 3.0) * 2)   # each 1% above 3% = +2pts to 18-24
+        # Larger follower base -> older skew
+        size_age_bonus = min(8, math.log10(max(median_flw, 1000)) - 3)
+
+        young = min(50, max(18, 28 + er_youth_bonus - size_age_bonus))
+        prime = min(45, max(25, 36 - er_youth_bonus * 0.3 + size_age_bonus * 0.5))
+        mid   = min(30, max(10, 100 - young - prime - 8))
+        old_  = max(5, 100 - young - prime - mid)
+
+        # Normalise
+        total = young + prime + mid + old_
+        base  = NICHE_DEMOGRAPHICS.get(niche.lower(), _DEFAULT_DEMO)
+        return {
+            '18-24': round(young / total * 100),
+            '25-34': round(prime / total * 100),
+            '35-44': round(mid   / total * 100),
+            '45+':   round(old_  / total * 100),
+            'female': base['female'],
+            'male':   base['male'],
+            'data_source': f'Derived from {len(df_niche):,} real {niche} creators (median ER={median_er:.1f}%)',
+        }
+    except Exception:
+        return None
+
+
 def get_audience_demographics(niche: str) -> dict:
     key = (niche or '').lower().strip()
-    demo = NICHE_DEMOGRAPHICS.get(key, _DEFAULT_DEMO)
+
+    # Try real-data derivation (cached per niche)
+    if key not in _NICHE_DEMO_CACHE:
+        real = _build_demo_from_csv(key)
+        _NICHE_DEMO_CACHE[key] = real if real else NICHE_DEMOGRAPHICS.get(key, _DEFAULT_DEMO)
+
+    demo = _NICHE_DEMO_CACHE[key]
     return {
         'age_groups': [
             {'label': '18-24', 'pct': demo['18-24']},
@@ -2327,6 +2439,7 @@ def get_audience_demographics(niche: str) -> dict:
         'gender': {'female': demo['female'], 'male': demo['male']},
         'primary_age': max(['18-24', '25-34', '35-44', '45+'], key=lambda k: demo[k]),
         'primary_gender': 'Female' if demo['female'] >= 50 else 'Male',
+        'data_source': demo.get('data_source', 'Industry benchmark'),
     }
 
 
@@ -3092,6 +3205,42 @@ def generate_video():
         runway_key = os.environ.get("RUNWAYML_API_SECRET", "")
 
         # -- Runway ML path ---------------------------------------------------
+        # -- Kling AI path (66 free credits/day -- best free option) -----------
+        kling_key = os.environ.get("KLING_API_KEY", "")
+        if kling_key:
+            try:
+                prompt = f"{reel_idea or script[:300]} - {category} vertical mobile cinematic"
+                kling_headers = {
+                    "Authorization": f"Bearer {kling_key}",
+                    "Content-Type":  "application/json",
+                }
+                kling_payload = {
+                    "model":        "kling-v1",
+                    "prompt":       prompt,
+                    "duration":     "5",
+                    "aspect_ratio": "9:16",
+                    "mode":         "std",
+                }
+                kr = http_requests.post(
+                    "https://api.klingai.com/v1/videos/text2video",
+                    json=kling_payload, headers=kling_headers, timeout=30,
+                )
+                if kr.status_code in (200, 201):
+                    kdata = kr.json()
+                    task_id = kdata.get("data", {}).get("task_id") or kdata.get("task_id", "")
+                    return jsonify({
+                        "status":   "generating",
+                        "task_id":  task_id,
+                        "poll_url": f"https://api.klingai.com/v1/videos/text2video/{task_id}",
+                        "message":  "Video generating on Kling AI (5 seconds, 9:16 vertical).",
+                        "provider": "Kling AI (Free 66 credits/day)",
+                    }), 202
+                else:
+                    logger.warning(f"Kling API returned {kr.status_code}: {kr.text[:200]}")
+            except Exception as ke:
+                logger.warning(f"Kling API failed: {ke}")
+
+        # -- Runway ML path ---------------------------------------------------
         if runway_key:
             try:
                 prompt = f"{reel_idea or script[:200]} - {category} content, cinematic, mobile vertical"
@@ -3203,6 +3352,51 @@ def content_quality():
 
     except Exception as e:
         logger.error(f"content-quality failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/detect-anomalies", methods=["POST"])
+def detect_anomalies_endpoint():
+    """
+    Engagement pod and spike detection for a creator profile.
+    Checks comment/like ratio (pod proxy) and ER vs follower-count expectation (spike proxy).
+    """
+    try:
+        data = request.get_json() or {}
+        result = detect_engagement_anomalies(data)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/posting-frequency", methods=["POST"])
+def posting_frequency():
+    """Compute estimated posting frequency from posts count and account profile."""
+    try:
+        data      = request.get_json() or {}
+        posts     = max(1, int(data.get("posts", 50)))
+        followers = max(1, int(data.get("followers", 10000)))
+        er        = float(data.get("engagement_rate", 3.0))
+
+        # Estimate account age: larger + higher ER -> older account (proxy)
+        est_months = min(60, max(6, math.log10(max(followers, 1000)) * 8 + er * 0.5))
+        posts_per_month = round(posts / est_months, 1)
+        posts_per_week  = round(posts_per_month / 4.3, 1)
+
+        consistency = (
+            "Very Active"  if posts_per_month >= 20 else
+            "Active"       if posts_per_month >= 8  else
+            "Moderate"     if posts_per_month >= 3  else
+            "Infrequent"
+        )
+        return jsonify({
+            "total_posts":        posts,
+            "est_account_months": round(est_months),
+            "posts_per_month":    posts_per_month,
+            "posts_per_week":     posts_per_week,
+            "consistency":        consistency,
+        }), 200
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 

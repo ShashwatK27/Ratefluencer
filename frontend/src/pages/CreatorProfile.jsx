@@ -119,10 +119,12 @@ export default function CreatorProfile() {
     );
   }
 
-  const viralityScore = creator.score || 72;
-  const authScore     = creator.auth  || 80;
-  const growthScore   = creator.growth || 75;
-  const erVal         = parseFloat(creator.er) || 4.2;
+  const viralityScore    = creator.score || 72;
+  const authScore        = creator.auth  || 80;
+  const growthScore      = creator.growth || 75;
+  const erVal            = parseFloat(creator.er) || 4.2;
+  const postsPerMonth    = creator.posts_per_month || null;
+  const postingConsistency = creator.posting_consistency || null;
 
   const viralColor  = viralityScore >= 80 ? "var(--accent)" : viralityScore >= 65 ? "var(--gold)" : "var(--coral)";
   const tier        = creator.tier || "A";
@@ -187,8 +189,14 @@ export default function CreatorProfile() {
             <div style={{ fontSize: "14px", color: "var(--text3)", marginBottom: "8px" }}>
               {creator.handle} . {creator.cat} . {creator.followers} followers
             </div>
-            <div style={{ display: "flex", gap: "16px" }}>
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "13px", color: "var(--accent)" }}>{creator.er} Engagement Rate</span>
+              {postsPerMonth && (
+                <span style={{ fontSize: "13px", color: "var(--blue)" }}>
+                  {postsPerMonth} posts/month
+                  {postingConsistency && <span style={{ marginLeft: "4px", fontSize: "11px", color: "var(--text3)" }}>({postingConsistency})</span>}
+                </span>
+              )}
               <span style={{ fontSize: "13px", color: "var(--text3)" }}>Instagram</span>
             </div>
           </div>

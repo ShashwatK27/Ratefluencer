@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { config } from '../config.js';
 import ReelAssets from '../components/ReelAssets.jsx';
 
-const CATEGORIES = ['Fashion', 'Food', 'Travel', 'Family', 'Beauty', 'Fitness', 'Interior', 'Pet', 'Other'];
+const CATEGORIES = [
+  'Fashion', 'Food', 'Travel', 'Family', 'Beauty', 'Fitness', 'Interior', 'Pet',
+  'AI', 'Technology', 'Business', 'Startups', 'Finance', 'Creator Economy',
+  'Education', 'Gaming', 'Music', 'Comedy', 'Wellness', 'Lifestyle', 'Other',
+];
 const DURATIONS  = [{ label: '30s Reel', val: 30 }, { label: '45s Reel', val: 45 }, { label: '60s Reel', val: 60 }];
 
 // -- Virality Score Ring -------------------------------------------------------

@@ -416,49 +416,79 @@ export default function AIAgent() {
               <button onClick={runAgent} className="btn btn-ghost btn-sm" style={{ fontSize: "12px" }}>↻ Run Again</button>
             </div>
 
-            {/* Agent Reasoning Trail */}
-            {result.content_attempts && result.content_attempts.length > 0 && (
-              <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "16px" }}>
-                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>
-                  🧠 Agent Reasoning  -  {result.content_attempts.length} iteration{result.content_attempts.length > 1 ? "s" : ""}
-                  {result.agent_refined && <span style={{ marginLeft: "8px", color: "var(--accent)" }}>✓ Content refined</span>}
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-                  {result.content_attempts.map(attempt => {
-                    const vColor = attempt.virality_score >= 68 ? "var(--accent)" : attempt.virality_score >= 50 ? "var(--gold)" : "var(--coral)";
-                    return (
-                      <div key={attempt.iteration} style={{
-                        background: "var(--bg)", border: `1px solid ${vColor}30`,
-                        borderRadius: "var(--radius-sm)", padding: "10px 14px", minWidth: "160px",
-                      }}>
-                        <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "4px" }}>
-                          Iteration {attempt.iteration}
-                        </div>
-                        <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: vColor, lineHeight: 1 }}>
-                          {attempt.virality_score}
-                        </div>
-                        <div style={{ fontSize: "10px", color: "var(--text3)", marginTop: "2px" }}>{attempt.bucket}</div>
-                        {attempt.strategy && (
-                          <div style={{ fontSize: "10px", color: "var(--blue)", marginTop: "4px", lineHeight: 1.4 }}>
-                            {attempt.strategy.slice(0, 55)}
-                          </div>
-                        )}
-                        {attempt.learned_applied && (
-                          <div style={{ fontSize: "9px", color: "var(--accent)", marginTop: "3px", fontFamily: "var(--font-mono)" }}>
-                            + learned prefs applied
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {result.creator_pool && result.creator_pool.length > 0 && (
-                  <div style={{ fontSize: "12px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
-                    Evaluated creators: {result.creator_pool.map(c => `${c.name} (RF=${c.rf_score})`).join(" . ")}
+            {/* Agent Reasoning Trail with before/after comparison */}
+            {result.content_attempts && result.content_attempts.length > 0 && (() => {
+              const attempts = result.content_attempts;
+              const first = attempts[0];
+              const best  = attempts.reduce((a,b) => b.virality_score > a.virality_score ? b : a, first);
+              const improved = best.virality_score > first.virality_score;
+              const learnedIter = attempts.find(a => a.learned_applied);
+              return (
+                <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
+                      Agent Reasoning  -  {attempts.length} iterations
+                    </div>
+                    {improved && (
+                      <span style={{ fontSize: "11px", color: "var(--accent)", fontFamily: "var(--font-mono)", padding: "2px 8px", borderRadius: "10px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)" }}>
+                        Score: {first.virality_score} -> {best.virality_score} (+{best.virality_score - first.virality_score})
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {/* Before / after strip */}
+                  {learnedIter && (
+                    <div style={{ padding: "8px 12px", background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.15)", borderRadius: "var(--radius-sm)", marginBottom: "10px", fontSize: "11px" }}>
+                      <span style={{ color: "var(--text3)" }}>Baseline (iter 1): </span>
+                      <span style={{ color: "var(--coral)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{first.virality_score}</span>
+                      <span style={{ color: "var(--text3)", margin: "0 8px" }}>--&gt; After learned prefs (iter {learnedIter.iteration}): </span>
+                      <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{learnedIter.virality_score}</span>
+                      <span style={{ color: "var(--text3)", marginLeft: "6px" }}>Tone, hashtag count, and style adjusted from your upvote history.</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                    {attempts.map(attempt => {
+                      const isFirst = attempt.iteration === 1;
+                      const isBest  = attempt.virality_score === best.virality_score && attempt.iteration === best.iteration;
+                      const vColor  = attempt.virality_score >= 68 ? "var(--accent)" : attempt.virality_score >= 50 ? "var(--gold)" : "var(--coral)";
+                      return (
+                        <div key={attempt.iteration} style={{
+                          background: isBest ? "rgba(200,240,104,0.06)" : "var(--bg)",
+                          border: `1px solid ${isBest ? "rgba(200,240,104,0.3)" : vColor + "30"}`,
+                          borderRadius: "var(--radius-sm)", padding: "10px 14px", minWidth: "150px", position: "relative",
+                        }}>
+                          {isBest && <div style={{ position: "absolute", top: "4px", right: "6px", fontSize: "8px", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>BEST</div>}
+                          <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "4px" }}>
+                            {isFirst ? "Baseline" : `Iteration ${attempt.iteration}`}
+                          </div>
+                          <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: vColor, lineHeight: 1 }}>
+                            {attempt.virality_score}
+                          </div>
+                          <div style={{ fontSize: "10px", color: "var(--text3)", marginTop: "2px" }}>{attempt.bucket}</div>
+                          {attempt.strategy && (
+                            <div style={{ fontSize: "9px", color: "var(--blue)", marginTop: "4px", lineHeight: 1.4 }}>
+                              {attempt.strategy.slice(0, 48)}
+                            </div>
+                          )}
+                          {attempt.learned_applied && (
+                            <div style={{ fontSize: "8px", color: "var(--accent)", marginTop: "3px", fontFamily: "var(--font-mono)" }}>
+                              learned prefs applied
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {result.creator_pool && result.creator_pool.length > 0 && (
+                    <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
+                      Top creators evaluated: {result.creator_pool.map(c => `${c.name} (RF ${c.rf_score})`).join("  .  ")}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Platform tabs */}
             <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
