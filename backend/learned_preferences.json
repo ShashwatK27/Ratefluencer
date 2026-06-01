@@ -1,0 +1,16 @@
+{
+  "Fitness": {
+    "category": "Fitness",
+    "avg_virality": 72.0,
+    "preferred_words": [
+      "caption"
+    ],
+    "avoid_words": [],
+    "avg_hashtags": 0,
+    "detected_tone": "Inspirational",
+    "upvoted_count": 1,
+    "downvoted_count": 0,
+    "confidence": 12,
+    "last_updated": "2026-06-02T02:12:30.794026"
+  }
+}
