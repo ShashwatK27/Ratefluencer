@@ -91,13 +91,13 @@ VITE_ENV=development
 
 ```
 1. User fills campaign form on frontend
-   ↓
+   v
 2. Form submitted to /api/match endpoint (via config)
-   ↓
+   v
 3. Backend processes with ML models (with absolute paths)
-   ↓
+   v
 4. Returns recommendations + insights
-   ↓
+   v
 5. Frontend displays results with error handling
 ```
 
@@ -171,5 +171,5 @@ frontend/
 
 1. Start backend: `python app.py`
 2. Start frontend: `npm run dev`
-3. Test the workflow: Create Campaign → Analyze → View Recommendations
+3. Test the workflow: Create Campaign -> Analyze -> View Recommendations
 4. If issues persist, check terminal logs for specific errors

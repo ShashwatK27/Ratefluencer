@@ -31,11 +31,11 @@ const RELATED_CATEGORIES = {
 };
 
 const TIER_TIPS = {
-  'Brand Awareness':     'Macro creators (100K–1M) maximise reach at the lowest CPM.',
-  'Sales / Conversions': 'Micro-creators (10K–100K) show 3× higher conversion rates.',
-  'Community Growth':    'Nano creators (1K–10K) drive the highest engagement per follower.',
+  'Brand Awareness':     'Macro creators (100K-1M) maximise reach at the lowest CPM.',
+  'Sales / Conversions': 'Micro-creators (10K-100K) show 3x higher conversion rates.',
+  'Community Growth':    'Nano creators (1K-10K) drive the highest engagement per follower.',
   'Product Launch':      'Mix Macro reach with Micro authenticity for maximum launch impact.',
-  'App Downloads':       'Tech-savvy audiences aged 18–34 deliver 4× higher install rates.',
+  'App Downloads':       'Tech-savvy audiences aged 18-34 deliver 4x higher install rates.',
 };
 
 const STEPS = [
@@ -92,9 +92,9 @@ export default function Campaign() {
   const [form, setForm] = useState(initialForm || {
     name: '', brand: '', goal: 'Brand Awareness',
     budget: 1000000,
-    ageGroup: '25–34', audience: '', country: 'India',
+    ageGroup: '25-34', audience: '', country: 'India',
     selectedCategories: ['Wellness'],
-    minAuth: '75+', tier: 'Macro (100K–1M)', minEr: '3%+', excludedBrands: '',
+    minAuth: '75+', tier: 'Macro (100K-1M)', minEr: '3%+', excludedBrands: '',
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -239,7 +239,7 @@ export default function Campaign() {
               <FormGroup label="Campaign Name" full>
                 <input type="text" value={form.name}
                   onChange={e => { set('name', e.target.value); setErrors(p => ({...p, name: ''})); }}
-                  placeholder="e.g. Diwali 2025 — Skincare Launch"
+                  placeholder="e.g. Diwali 2025  -  Skincare Launch"
                   style={errors.name ? { borderColor: 'var(--coral)' } : {}}
                   autoFocus
                 />
@@ -304,7 +304,7 @@ export default function Campaign() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <FormGroup label="Primary Age Group">
                 <select value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)}>
-                  {['13–17','18–24','25–34','35–44','45+'].map(a => <option key={a}>{a}</option>)}
+                  {['13-17','18-24','25-34','35-44','45+'].map(a => <option key={a}>{a}</option>)}
                 </select>
               </FormGroup>
               <FormGroup label={<>Audience Description <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(most impactful for AI matching)</span></>}>
@@ -347,7 +347,7 @@ export default function Campaign() {
                     const primary = form.selectedCategories[0];
                     const related = (RELATED_CATEGORIES[primary] || []).filter(s => !form.selectedCategories.includes(s)).slice(0, 2);
                     return related.length > 0
-                      ? <><strong style={{ color: 'var(--accent)' }}>AI Tip:</strong> For <strong style={{ color: 'var(--text)' }}>{primary}</strong> + {form.ageGroup}, also consider <strong style={{ color: 'var(--accent)' }}>{related.join(' & ')}</strong> — strong audience overlap.</>
+                      ? <><strong style={{ color: 'var(--accent)' }}>AI Tip:</strong> For <strong style={{ color: 'var(--text)' }}>{primary}</strong> + {form.ageGroup}, also consider <strong style={{ color: 'var(--accent)' }}>{related.join(' & ')}</strong>  -  strong audience overlap.</>
                       : <><strong style={{ color: 'var(--accent)' }}>Good selection!</strong> {form.selectedCategories.join(' + ')} is well-targeted for {form.ageGroup}.</>;
                   })()}
                 </div>
@@ -369,7 +369,7 @@ export default function Campaign() {
               </FormGroup>
               <FormGroup label="Influencer Tier">
                 <select value={form.tier} onChange={e => set('tier', e.target.value)}>
-                  {['All tiers','Nano (1K–10K)','Micro (10K–100K)','Macro (100K–1M)','Mega (1M+)'].map(v => <option key={v}>{v}</option>)}
+                  {['All tiers','Nano (1K-10K)','Micro (10K-100K)','Macro (100K-1M)','Mega (1M+)'].map(v => <option key={v}>{v}</option>)}
                 </select>
               </FormGroup>
               <FormGroup label="Min Engagement Rate">
@@ -385,8 +385,8 @@ export default function Campaign() {
 
             <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '13px', color: 'var(--text2)', lineHeight: 1.8 }}>
               <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: '8px' }}>Campaign Summary</div>
-              <strong style={{ color: 'var(--text)' }}>{form.name || 'Untitled'}</strong> for <strong style={{ color: 'var(--accent)' }}>{form.brand || '—'}</strong> ·{' '}
-              {formatBudget(form.budget)} · {form.goal} · {form.ageGroup} · {form.selectedCategories.join(', ')}
+              <strong style={{ color: 'var(--text)' }}>{form.name || 'Untitled'}</strong> for <strong style={{ color: 'var(--accent)' }}>{form.brand || ' - '}</strong> .{' '}
+              {formatBudget(form.budget)} . {form.goal} . {form.ageGroup} . {form.selectedCategories.join(', ')}
             </div>
           </div>
         )}
@@ -400,7 +400,7 @@ export default function Campaign() {
           {step < 5 ? (
             <button className="btn btn-primary" onClick={next}
               style={{ flex: 2, justifyContent: 'center', padding: '14px', fontSize: '15px' }}>
-              Next →
+              Next ->
             </button>
           ) : (
             <button

@@ -22,6 +22,8 @@ import RealCreatorsPage from './pages/RealCreatorsPage.jsx';
 import CreatorProfile from './pages/CreatorProfile.jsx';
 import TrendRanking from './pages/TrendRanking.jsx';
 import CreatorCorner from './pages/CreatorCorner.jsx';
+import ContentStudio from './pages/ContentStudio.jsx';
+import InfluencerPortal from './pages/InfluencerPortal.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 function ToastContainer() {
@@ -60,8 +62,10 @@ function AppRoutes() {
           <Route path="/real-creators"    element={<RealCreatorsPage />} />
           <Route path="/trend-ranking"    element={<TrendRanking />} />
           <Route path="/creator-profile"  element={<CreatorProfile />} />
-          <Route path="/creator-corner"   element={<CreatorCorner />} />
-          <Route path="*"                 element={<NotFound />} />
+          <Route path="/creator-corner"    element={<CreatorCorner />} />
+          <Route path="/content-studio"   element={<ContentStudio />} />
+          <Route path="/influencer-portal" element={<InfluencerPortal />} />
+          <Route path="*"                  element={<NotFound />} />
         </Routes>
       </ErrorBoundary>
       <ToastContainer />

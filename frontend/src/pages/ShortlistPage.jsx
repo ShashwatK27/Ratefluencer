@@ -116,7 +116,7 @@ export default function ShortlistPage() {
                         </span>
                       </div>
                       <div style={{ fontSize: "12px", color: "var(--text3)", marginBottom: "12px" }}>
-                        {creator.meta} {creator.engRate && `· ${creator.engRate} ER`}
+                        {creator.meta} {creator.engRate && `. ${creator.engRate} ER`}
                       </div>
 
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "10px" }}>

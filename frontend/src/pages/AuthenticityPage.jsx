@@ -38,7 +38,7 @@ export default function AuthenticityPage() {
                 Authenticity Detector
               </h2>
               <p style={{ fontSize: "14px", color: "var(--text2)" }}>
-                XGBoost binary classifier — flags fake accounts before you spend budget on them
+                XGBoost binary classifier  -  flags fake accounts before you spend budget on them
               </p>
             </div>
 

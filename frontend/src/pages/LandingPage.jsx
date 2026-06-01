@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// ── Animated counter ────────────────────────────────────────────────────────
+// -- Animated counter --------------------------------------------------------
 function CountUp({ target, suffix = '', duration = 1800 }) {
   const [val, setVal] = useState(0);
   const ref = useRef(null);
@@ -28,7 +28,7 @@ function CountUp({ target, suffix = '', duration = 1800 }) {
   return <span ref={ref}>{typeof target === 'number' && target >= 1000 ? val.toLocaleString('en-IN') : val}{suffix}</span>;
 }
 
-// ── Mini score ring for hero preview ───────────────────────────────────────
+// -- Mini score ring for hero preview ---------------------------------------
 function MiniRing({ score, color, size = 56, animate = true }) {
   const r = (size / 2) - 5;
   const circ = 2 * Math.PI * r;
@@ -50,12 +50,12 @@ function MiniRing({ score, color, size = 56, animate = true }) {
   );
 }
 
-// ── Live product preview card ───────────────────────────────────────────────
+// -- Live product preview card -----------------------------------------------
 function HeroPreview() {
   const creators = [
-    { name: 'Shashwat',       meta: 'Fitness · 1.2M · Instagram', score: 94, growth: 88, auth: 96, brand: 91, color: '#C8F068', badge: '👑 #1 Match' },
-    { name: 'Vaidehi Turkar', meta: 'Beauty · 480K · Instagram', score: 81, growth: 85, auth: 90, brand: 78, color: '#68B8F0', badge: null },
-    { name: 'Ram Travels',  meta: 'Travel · 720K · Instagram',  score: 73, growth: 70, auth: 83, brand: 86, color: '#F0C96A', badge: null },
+    { name: 'Shashwat',       meta: 'Fitness . 1.2M . Instagram', score: 94, growth: 88, auth: 96, brand: 91, color: '#C8F068', badge: '👑 #1 Match' },
+    { name: 'Vaidehi Turkar', meta: 'Beauty . 480K . Instagram', score: 81, growth: 85, auth: 90, brand: 78, color: '#68B8F0', badge: null },
+    { name: 'Ram Travels',  meta: 'Travel . 720K . Instagram',  score: 73, growth: 70, auth: 83, brand: 86, color: '#F0C96A', badge: null },
   ];
 
   return (
@@ -76,7 +76,7 @@ function HeroPreview() {
 
       {/* Label */}
       <div style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--accent)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: '10px', opacity: .7 }}>
-        AI Recommendations · Skincare Campaign · ₹5L budget
+        AI Recommendations . Skincare Campaign . ₹5L budget
       </div>
 
       {/* Creator rows */}
@@ -135,7 +135,7 @@ function HeroPreview() {
   );
 }
 
-// ── Feature card ────────────────────────────────────────────────────────────
+// -- Feature card ------------------------------------------------------------
 function FeatureCard({ icon, iconBg, title, desc, scoreLabel, scoreClass, color }) {
   return (
     <div className="shine-card grad-border" style={{
@@ -162,23 +162,23 @@ function FeatureCard({ icon, iconBg, title, desc, scoreLabel, scoreClass, color 
   );
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────
+// -- Main --------------------------------------------------------------------
 const FEATURES = [
-  { icon: '🛡️', iconBg: 'var(--accent-dim)', title: 'Authenticity Detection', desc: 'XGBoost model (93% accuracy, AUC 98.25%) detects fake followers, bots, and engagement pods before you spend a rupee.', scoreLabel: 'Authenticity Score 0–100', scoreClass: 'tag-green' },
-  { icon: '📈', iconBg: 'var(--blue-dim)',   title: 'Growth Prediction',      desc: 'RandomForest regression (R² = 0.896) forecasts follower growth and engagement trajectory over 30/90/180 days.', scoreLabel: 'Growth Score 0–100', scoreClass: 'tag-blue' },
-  { icon: '🏷️', iconBg: 'var(--gold-dim)',  title: 'Brand Matching via RAG',  desc: 'SentenceTransformer embeddings + ChromaDB semantic search matches creators to brands across 50,000 profiles in under 3 seconds.', scoreLabel: 'Brand Match 0–100', scoreClass: 'tag-gold' },
+  { icon: '🛡️', iconBg: 'var(--accent-dim)', title: 'Authenticity Detection', desc: 'XGBoost model (93% accuracy, AUC 98.25%) detects fake followers, bots, and engagement pods before you spend a rupee.', scoreLabel: 'Authenticity Score 0-100', scoreClass: 'tag-green' },
+  { icon: '📈', iconBg: 'var(--blue-dim)',   title: 'Growth Prediction',      desc: 'RandomForest regression (R² = 0.896) forecasts follower growth and engagement trajectory over 30/90/180 days.', scoreLabel: 'Growth Score 0-100', scoreClass: 'tag-blue' },
+  { icon: '🏷️', iconBg: 'var(--gold-dim)',  title: 'Brand Matching via RAG',  desc: 'SentenceTransformer embeddings + ChromaDB semantic search matches creators to brands across 50,000 profiles in under 3 seconds.', scoreLabel: 'Brand Match 0-100', scoreClass: 'tag-gold' },
 ];
 
 const FEATURES2 = [
-  { icon: '🤖', iconBg: 'var(--coral-dim)',  title: 'Ratefluencer™ Score',          desc: 'Goal-aware weighted composite of all three models. Shifts automatically between brand awareness, conversions, and niche targeting objectives.', scoreLabel: 'Ratefluencer™ Score 0–100', scoreClass: 'tag-coral' },
-  { icon: '📊', iconBg: 'var(--purple-dim)', title: 'Real Data Viral Optimizer',     desc: 'Content recommendations backed by 30,000 real Instagram posts — optimal hashtag count, posting hours, and CTA patterns per category.', scoreLabel: 'Virality Score 0–100', scoreClass: 'tag-purple' },
+  { icon: '🤖', iconBg: 'var(--coral-dim)',  title: 'Ratefluencer™ Score',          desc: 'Goal-aware weighted composite of all three models. Shifts automatically between brand awareness, conversions, and niche targeting objectives.', scoreLabel: 'Ratefluencer™ Score 0-100', scoreClass: 'tag-coral' },
+  { icon: '📊', iconBg: 'var(--purple-dim)', title: 'Real Data Viral Optimizer',     desc: 'Content recommendations backed by 30,000 real Instagram posts  -  optimal hashtag count, posting hours, and CTA patterns per category.', scoreLabel: 'Virality Score 0-100', scoreClass: 'tag-purple' },
 ];
 
 const STEPS = [
   { num: '01', title: 'Define your campaign',         desc: 'Set your brand, budget, target audience, and content category. The AI picks up context automatically.' },
   { num: '02', title: 'ML engine scores 50K creators', desc: 'Authenticity, Growth, and Brand Match models evaluate every creator in the database simultaneously.' },
   { num: '03', title: 'Ratefluencer™ score computed',  desc: 'Goal-aware weights combine all three models into a single ROI-ranked recommendation list.' },
-  { num: '04', title: 'You get actionable results',    desc: 'Ranked creators, fraud flags, ROI estimate, virality-optimised content brief — ready in seconds.' },
+  { num: '04', title: 'You get actionable results',    desc: 'Ranked creators, fraud flags, ROI estimate, virality-optimised content brief  -  ready in seconds.' },
 ];
 
 const STATS = [
@@ -210,7 +210,7 @@ export default function LandingPage() {
         @keyframes orb2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-30px,20px)} }
       `}</style>
 
-      {/* ── Hero ── */}
+      {/* -- Hero -- */}
       <section style={{
         minHeight: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
@@ -232,7 +232,7 @@ export default function LandingPage() {
         {/* Two-column layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4rem', alignItems: 'center', maxWidth: '1100px', width: '100%', position: 'relative' }}>
 
-          {/* Left — text */}
+          {/* Left  -  text */}
           <div>
             <div className="fade-up" style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
@@ -257,7 +257,7 @@ export default function LandingPage() {
               fontSize: '17px', color: 'var(--text2)', lineHeight: 1.75,
               marginBottom: '2.5rem', fontWeight: 300, maxWidth: '460px',
             }}>
-              Stop guessing with follower counts. Our AI scores 50,000 creators on authenticity, growth, and brand fit — and tells you the ROI before you spend a rupee.
+              Stop guessing with follower counts. Our AI scores 50,000 creators on authenticity, growth, and brand fit  -  and tells you the ROI before you spend a rupee.
             </p>
 
             <div className="fade-up delay-3" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '3rem' }}>
@@ -266,7 +266,7 @@ export default function LandingPage() {
                 onClick={() => onNavigate('campaign')}
                 style={{ fontSize: '15px', padding: '13px 28px' }}
               >
-                Start a Campaign →
+                Start a Campaign ->
               </button>
               <button className="btn btn-ghost" onClick={() => onNavigate('dashboard')}>
                 View Dashboard
@@ -287,14 +287,14 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right — live product preview */}
+          {/* Right  -  live product preview */}
           <div className="fade-up delay-2" style={{ display: 'flex', justifyContent: 'center' }}>
             <HeroPreview />
           </div>
         </div>
       </section>
 
-      {/* ── Stats strip ── */}
+      {/* -- Stats strip -- */}
       <section style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--bg2)' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1px', background: 'var(--border)' }}>
           {STATS.map(s => (
@@ -310,7 +310,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Features ── */}
+      {/* -- Features -- */}
       <section style={{ padding: '7rem 2rem', maxWidth: '1100px', margin: '0 auto' }}>
         <div className="section-label">What we analyze</div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px,4vw,52px)', marginBottom: '1rem', lineHeight: 1.05 }}>
@@ -328,7 +328,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── How it works ── */}
+      {/* -- How it works -- */}
       <section style={{ padding: '7rem 2rem', background: 'var(--bg2)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           <div className="section-label">How it works</div>
@@ -356,7 +356,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Grand Challenge Progress ── */}
+      {/* -- Grand Challenge Progress -- */}
       <section style={{ padding: '6rem 2rem', maxWidth: '1100px', margin: '0 auto' }}>
         <div className="section-label">Grand Challenge Status</div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px,4vw,48px)', marginBottom: '1rem', lineHeight: 1.05 }}>
@@ -434,13 +434,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── CTA ── */}
+      {/* -- CTA -- */}
       <section style={{ padding: '8rem 2rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 50% at 50% 50%,rgba(200,240,104,0.05),transparent)', pointerEvents: 'none' }} />
         <div style={{ maxWidth: '600px', margin: '0 auto', position: 'relative' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 14px', borderRadius: '20px', border: '1px solid rgba(200,240,104,0.25)', background: 'rgba(200,240,104,0.06)', fontSize: '11px', color: 'var(--accent)', fontFamily: 'var(--font-mono)', marginBottom: '1.5rem' }}>
             <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', animation: 'pulse 2s infinite' }} />
-            LIVE · Ready to use
+            LIVE . Ready to use
           </div>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px,5vw,56px)', marginBottom: '1.25rem', lineHeight: 1.1 }}>
             Stop guessing.<br />Start converting.
@@ -454,7 +454,7 @@ export default function LandingPage() {
               onClick={() => onNavigate('campaign')}
               style={{ fontSize: '16px', padding: '15px 36px' }}
             >
-              Analyze a Campaign →
+              Analyze a Campaign ->
             </button>
             <button className="btn btn-ghost" onClick={() => onNavigate('viralLab')}>
               Try Viral Lab
@@ -464,7 +464,7 @@ export default function LandingPage() {
       </section>
 
       <footer style={{ borderTop: '1px solid var(--border)', padding: '2rem', textAlign: 'center', color: 'var(--text3)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
-        © 2025 Ratefluencer™ · AI Influencer Intelligence · XGBoost + RandomForest + RAG
+        © 2025 Ratefluencer™ . AI Influencer Intelligence . XGBoost + RandomForest + RAG
       </footer>
     </div>
   );

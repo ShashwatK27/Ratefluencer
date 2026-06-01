@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import axios from "axios";
 import { config } from "../config.js";
 
-// ── Voiceover ────────────────────────────────────────────────────────────────
+// -- Voiceover ----------------------------------------------------------------
 const VOICES = [
   { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella",   desc: "Warm female" },
   { id: "pNInz6obpgDQGcFmaJgB", name: "Adam",    desc: "Clear male"  },
@@ -97,7 +97,7 @@ function Voiceover({ script }) {
             color: voiceId === v.id ? "var(--accent)" : "var(--text2)",
             fontFamily: "var(--font-body)",
           }}>
-            {v.name} <span style={{ color: "var(--text3)", fontSize: "10px" }}>· {v.desc}</span>
+            {v.name} <span style={{ color: "var(--text3)", fontSize: "10px" }}>. {v.desc}</span>
           </button>
         ))}
       </div>
@@ -151,14 +151,14 @@ function Voiceover({ script }) {
       )}
 
       <div style={{ fontSize: "11px", color: "var(--text3)", lineHeight: 1.6 }}>
-        Powered by ElevenLabs · <strong style={{ color: "var(--text2)" }}>eleven_multilingual_v2</strong> model · Free tier: 10K chars/month
+        Powered by ElevenLabs . <strong style={{ color: "var(--text2)" }}>eleven_multilingual_v2</strong> model . Free tier: 10K chars/month
       </div>
       <style>{`@keyframes waveBar { from{transform:scaleY(0.4)} to{transform:scaleY(1)} }`}</style>
     </div>
   );
 }
 
-// ── Thumbnail ────────────────────────────────────────────────────────────────
+// -- Thumbnail ----------------------------------------------------------------
 function Thumbnail({ reelIdea, category, viralityScore }) {
   const canvasRef = useRef(null);
 
@@ -228,7 +228,7 @@ function Thumbnail({ reelIdea, category, viralityScore }) {
     ctx.font = "bold 72px 'Instrument Serif', serif";
     ctx.fillStyle = "#C8F068";
     ctx.textAlign = "center";
-    ctx.fillText(viralityScore || "—", W/2, 660);
+    ctx.fillText(viralityScore || " - ", W/2, 660);
     ctx.font = "13px 'DM Mono', monospace";
     ctx.fillStyle = "rgba(200,240,104,0.6)";
     ctx.fillText("VIRALITY SCORE", W/2, 685);
@@ -305,7 +305,7 @@ function wrapText(ctx, text, x, y, maxW, lineH, font) {
   ctx.fillText(line.trim(), x, curY);
 }
 
-// ── Subtitles ────────────────────────────────────────────────────────────────
+// -- Subtitles ----------------------------------------------------------------
 function Subtitles({ script }) {
   const [playing, setPlaying] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -403,13 +403,13 @@ function Subtitles({ script }) {
         </button>
       </div>
       <div style={{ fontSize: "11px", color: "var(--text3)", marginTop: "6px" }}>
-        {segments.length} segments · ~{Math.round(totalDur)}s total
+        {segments.length} segments . ~{Math.round(totalDur)}s total
       </div>
     </div>
   );
 }
 
-// ── B-Roll ────────────────────────────────────────────────────────────────────
+// -- B-Roll --------------------------------------------------------------------
 function BRoll({ script, reelIdea, category }) {
   const keywords = (() => {
     const text = `${reelIdea || ""} ${script || ""} ${category || ""}`.toLowerCase();
@@ -425,7 +425,7 @@ function BRoll({ script, reelIdea, category }) {
   return (
     <div>
       <div style={{ fontSize: "13px", color: "var(--text2)", marginBottom: "12px", lineHeight: 1.6 }}>
-        Keywords extracted from your script — click any to find matching stock footage on Pexels.
+        Keywords extracted from your script  -  click any to find matching stock footage on Pexels.
       </div>
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
         {keywords.map(kw => (
@@ -443,13 +443,13 @@ function BRoll({ script, reelIdea, category }) {
         ))}
       </div>
       <div style={{ fontSize: "11px", color: "var(--text3)", marginTop: "8px" }}>
-        Opens Pexels video search · Free to use stock footage
+        Opens Pexels video search . Free to use stock footage
       </div>
     </div>
   );
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// -- Main export ---------------------------------------------------------------
 const ASSET_TABS = [
   { id: "voiceover",  icon: "🔊", label: "Voiceover"  },
   { id: "thumbnail",  icon: "🖼️", label: "Thumbnail"  },
@@ -489,7 +489,7 @@ export default function ReelAssets({ result, category }) {
           {activeTab === "voiceover" && (
             <div>
               <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "12px" }}>
-                🔊 Script Voiceover — Browser Speech Synthesis
+                🔊 Script Voiceover  -  Browser Speech Synthesis
               </div>
               <Voiceover script={result.script || result.reel_idea || ""} />
               <div style={{ marginTop: "12px", padding: "10px 12px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--text3)", lineHeight: 1.6 }}>
@@ -519,7 +519,7 @@ export default function ReelAssets({ result, category }) {
           {activeTab === "broll" && (
             <div>
               <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "12px" }}>
-                🎬 B-Roll Keywords → Stock Footage
+                🎬 B-Roll Keywords -> Stock Footage
               </div>
               <BRoll script={result.script} reelIdea={result.reel_idea} category={category} />
             </div>

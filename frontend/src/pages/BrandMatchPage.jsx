@@ -47,7 +47,7 @@ export default function BrandMatchPage() {
                 Brand Match Engine
               </h2>
               <p style={{ fontSize: "14px", color: "var(--text2)" }}>
-                SentenceTransformer + ChromaDB — semantic similarity matching between campaigns and creators
+                SentenceTransformer + ChromaDB  -  semantic similarity matching between campaigns and creators
               </p>
             </div>
 
@@ -60,13 +60,13 @@ export default function BrandMatchPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 {[
                   { step: "1", label: "Campaign Brief", icon: "📋" },
-                  { step: "→", label: null, icon: null },
+                  { step: "->", label: null, icon: null },
                   { step: "2", label: "Embed via SentenceTransformer", icon: "🧠" },
-                  { step: "→", label: null, icon: null },
+                  { step: "->", label: null, icon: null },
                   { step: "3", label: "Cosine Search in ChromaDB", icon: "🔍" },
-                  { step: "→", label: null, icon: null },
+                  { step: "->", label: null, icon: null },
                   { step: "4", label: "Goal-Weighted Re-rank", icon: "⚖️" },
-                  { step: "→", label: null, icon: null },
+                  { step: "->", label: null, icon: null },
                   { step: "5", label: "Top-K Results", icon: "🏆" },
                 ].map((item, i) => (
                   item.label ? (
@@ -86,7 +86,7 @@ export default function BrandMatchPage() {
                       <span style={{ fontSize: "12px", color: "var(--text2)" }}>{item.label}</span>
                     </div>
                   ) : (
-                    <span key={i} style={{ color: "var(--text3)", fontSize: "18px" }}>→</span>
+                    <span key={i} style={{ color: "var(--text3)", fontSize: "18px" }}>-></span>
                   )
                 ))}
               </div>
@@ -133,10 +133,10 @@ export default function BrandMatchPage() {
               <div className="section-label" style={{ marginBottom: "12px" }}>Technology Stack</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "10px" }}>
                 {[
-                  { name: "SentenceTransformer", detail: "all-MiniLM-L12-v2 — fast, high-quality embeddings", icon: "🧠" },
+                  { name: "SentenceTransformer", detail: "all-MiniLM-L12-v2  -  fast, high-quality embeddings", icon: "🧠" },
                   { name: "ChromaDB", detail: "Vector store with cosine similarity and metadata filters", icon: "🗄️" },
                   { name: "50,000 Creators", detail: "Indexed in-memory for sub-second search", icon: "👥" },
-                  { name: "Cosine Similarity", detail: "Bounded 0–1 similarity metric, stable across embedding spaces", icon: "📐" },
+                  { name: "Cosine Similarity", detail: "Bounded 0-1 similarity metric, stable across embedding spaces", icon: "📐" },
                 ].map(item => (
                   <div key={item.name} style={{
                     background: "var(--bg)", border: "1px solid var(--border)",

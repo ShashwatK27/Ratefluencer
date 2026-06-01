@@ -1,22 +1,22 @@
-// ── Influencer Table Data ──────────────────────────────────────────────────
+// -- Influencer Table Data --------------------------------------------------
 export const influencers = [
 ];
 
-// ── KPI Data ──────────────────────────────────────────────────────────────
+// -- KPI Data --------------------------------------------------------------
 export const kpis = [
   { label: 'Total Influencers',   value: '33,935', delta: 'Live dataset',       deltaType: 'neutral',   icon: '👥' },
-  { label: 'Avg Engagement',      value: '4.8%',  delta: '↑ 0.3% vs last month',  deltaType: 'up',   icon: '💬' },
-  { label: 'Campaign Success Rate', value: '76.2%', delta: '↓ 1.4% vs last month', deltaType: 'down', icon: '🎯' },
+  { label: 'Avg Engagement',      value: '4.8%',  delta: '^ 0.3% vs last month',  deltaType: 'up',   icon: '💬' },
+  { label: 'Campaign Success Rate', value: '76.2%', delta: 'v 1.4% vs last month', deltaType: 'down', icon: '🎯' },
   { label: 'Top Ratefluencer™',   value: '94',    delta: '@aria_ventures',         deltaType: 'neutral', icon: '⭐' },
 ];
 
-// ── Recommendation Data ────────────────────────────────────────────────────
+// -- Recommendation Data ----------------------------------------------------
 export const recommendations = [
   {
     rank: 1,
     name: 'vanessaaalfaro',
     handle: '@vanessaaalfaro',
-    meta: 'Wellness · 450K followers · Instagram',
+    meta: 'Wellness . 450K followers . Instagram',
     badge: '👑 #1 Match',
     ratefluencer: 94,
     growth: 91,
@@ -32,7 +32,7 @@ export const recommendations = [
     rank: 2,
     name: 'confessionsofdoctordream',
     handle: '@confessionsofdoctordream',
-    meta: 'Beauty · 320K followers · Instagram',
+    meta: 'Beauty . 320K followers . Instagram',
     badge: null,
     ratefluencer: 82,
     growth: 85,
@@ -48,7 +48,7 @@ export const recommendations = [
     rank: 3,
     name: 'mykoreanplate',
     handle: '@mykoreanplate',
-    meta: 'Fashion · 280K followers · Instagram',
+    meta: 'Fashion . 280K followers . Instagram',
     badge: null,
     ratefluencer: 68,
     growth: 77,
@@ -62,7 +62,7 @@ export const recommendations = [
   },
 ];
 
-// ── AI Insights ────────────────────────────────────────────────────────────
+// -- AI Insights ------------------------------------------------------------
 export const aiInsights = [
   {
     icon: '🎯',
@@ -77,11 +77,11 @@ export const aiInsights = [
   {
     icon: '💡',
     title: 'Nano Opportunity',
-    text: 'Our model identified micro-creators (50K–200K) in Indian wellness with Ratefluencer™ scores above 80. Combining 2–3 of them may outperform a single mega-influencer at 40% lower cost.',
+    text: 'Our model identified micro-creators (50K-200K) in Indian wellness with Ratefluencer™ scores above 80. Combining 2-3 of them may outperform a single mega-influencer at 40% lower cost.',
   },
 ];
 
-// ── Campaign Categories ────────────────────────────────────────────────────
+// -- Campaign Categories ----------------------------------------------------
 export const campaignCategories = [
   { icon: '💄', label: 'Beauty' },
   { icon: '🌿', label: 'Wellness' },
@@ -97,7 +97,7 @@ export const campaignCategories = [
   { icon: '🐾', label: 'Pets' },
 ];
 
-// ── Sidebar Navigation Items ───────────────────────────────────────────────
+// -- Sidebar Navigation Items -----------------------------------------------
 export const sidebarNav = {
   main: [
     { icon: '📊', label: 'Dashboard',  route: '/dashboard',       iconBg: 'var(--accent-dim)' },
@@ -111,9 +111,11 @@ export const sidebarNav = {
     { icon: '📊', label: 'Real Insights', route: '/insights',      iconBg: 'var(--gold-dim)'   },
     { icon: '🌍', label: 'Real Creators', route: '/real-creators', iconBg: 'var(--blue-dim)'   },
     { icon: '🔥', label: 'Trend Ranking', route: '/trend-ranking', iconBg: 'var(--coral-dim)'  },
+    { icon: '🎬', label: 'Content Studio',route: '/content-studio',iconBg: 'var(--purple-dim)' },
   ],
   settings: [
-    { icon: '📋', label: 'Shortlist',   route: '/shortlist',    iconBg: 'rgba(255,255,255,0.05)' },
-    { icon: '⚙️', label: 'Preferences', route: '/preferences',  iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '📋', label: 'Shortlist',        route: '/shortlist',         iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '⚙️', label: 'Preferences',      route: '/preferences',       iconBg: 'rgba(255,255,255,0.05)' },
+    { icon: '✨', label: 'My Score',          route: '/influencer-portal', iconBg: 'rgba(200,240,104,0.08)' },
   ],
 };

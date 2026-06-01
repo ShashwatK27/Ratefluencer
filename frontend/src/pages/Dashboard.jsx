@@ -43,7 +43,7 @@ export default function Dashboard() {
     load().finally(() => setLoading(false));
   }, []);
 
-  // Filter real creators on the frontend — instant, no round-trip
+  // Filter real creators on the frontend  -  instant, no round-trip
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     const cat = activeCategory.toLowerCase();

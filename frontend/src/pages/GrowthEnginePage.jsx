@@ -9,11 +9,11 @@ const FEATURES = [
   { name: "7-Day Avg Shares", type: "Rolling", desc: "Shares predict viral amplification potential" },
   { name: "Engagement Rate", type: "Core", desc: "Ratio of total interactions to follower count" },
   { name: "Net Follower Growth", type: "Core", desc: "New followers minus unfollows over the period" },
-  { name: "Lag-1 Growth", type: "Lag", desc: "Net growth from 1 day ago — captures short-term momentum" },
-  { name: "Lag-2 Growth", type: "Lag", desc: "Net growth from 2 days ago — smooths noise" },
+  { name: "Lag-1 Growth", type: "Lag", desc: "Net growth from 1 day ago  -  captures short-term momentum" },
+  { name: "Lag-2 Growth", type: "Lag", desc: "Net growth from 2 days ago  -  smooths noise" },
   { name: "Lag-7 Growth", type: "Lag", desc: "Week-over-week growth comparison" },
   { name: "3-Day Rolling Mean", type: "Rolling", desc: "Short-term smoothed growth for trend detection" },
-  { name: "3-Day Rolling Std", type: "Rolling", desc: "Volatility indicator — high std = inconsistent posting" },
+  { name: "3-Day Rolling Std", type: "Rolling", desc: "Volatility indicator  -  high std = inconsistent posting" },
   { name: "Growth Momentum", type: "Derived", desc: "Lag-1 minus Lag-7, positive = accelerating growth" },
 ];
 
@@ -34,7 +34,7 @@ export default function GrowthEnginePage() {
                 Growth Engine
               </h2>
               <p style={{ fontSize: "14px", color: "var(--text2)" }}>
-                RandomForest regression — forecasts follower growth trajectory for any creator
+                RandomForest regression  -  forecasts follower growth trajectory for any creator
               </p>
             </div>
 
@@ -67,14 +67,14 @@ export default function GrowthEnginePage() {
                 <strong style={{ color: "var(--text)" }}>16 time-series features</strong> engineered from raw creator metrics.
                 Lag features capture short and long-term growth momentum, while rolling statistics smooth noise.
                 Trained with <strong style={{ color: "var(--text)" }}>5-fold cross-validation</strong>, this v2 model
-                achieves a <strong style={{ color: "var(--accent)" }}>45% improvement over v1</strong> (MAE: 5.37 → 2.94).
+                achieves a <strong style={{ color: "var(--accent)" }}>45% improvement over v1</strong> (MAE: 5.37 -> 2.94).
                 Each prediction includes a confidence bound derived from the variance across decision trees.
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "12px", marginTop: "1rem" }}>
                 {[
                   { label: "v1 MAE", value: "5.37", sub: "Previous model", color: "var(--text3)" },
-                  { label: "v2 MAE", value: "2.94", sub: "Current model — 45% improvement", color: "var(--accent)" },
+                  { label: "v2 MAE", value: "2.94", sub: "Current model  -  45% improvement", color: "var(--accent)" },
                 ].map(item => (
                   <div key={item.label} style={{
                     background: "var(--bg)", border: "1px solid var(--border)",

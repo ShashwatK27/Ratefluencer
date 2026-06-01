@@ -224,7 +224,7 @@ export default function CreatorCorner() {
                     <MatchCard key={c.campaign_id} campaign={c} idx={i} />
                   ))}
                   <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textAlign: "center", marginTop: "4px" }}>
-                    Matched from {total} active campaigns · Updates when brands run new campaigns
+                    Matched from {total} active campaigns . Updates when brands run new campaigns
                   </div>
                 </div>
               )}

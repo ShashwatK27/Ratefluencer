@@ -23,10 +23,10 @@ function TrendCard({ trend, rank }) {
       onClick={() => setExpanded(!expanded)}
       className="shine-card"
       style={{
-        background: "var(--bg2)", border: `1px solid ${rank === 1 ? "rgba(200,240,104,0.25)" : "var(--border)"}`,
+        background: rank === 1 ? "linear-gradient(135deg,rgba(200,240,104,0.04),var(--bg2))" : "var(--bg2)",
+        border: `1px solid ${rank === 1 ? "rgba(200,240,104,0.25)" : "var(--border)"}`,
         borderRadius: "var(--radius)", padding: "1.25rem 1.5rem",
         cursor: "pointer", transition: "all .2s",
-        background: rank === 1 ? "linear-gradient(135deg,rgba(200,240,104,0.04),var(--bg2))" : "var(--bg2)",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
@@ -110,7 +110,7 @@ export default function TrendRanking() {
 
             <div style={{ marginBottom: "2rem" }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "28px", marginBottom: "4px" }}>Trend Ranking Engine</h2>
-              <p style={{ fontSize: "14px", color: "var(--text2)" }}>ML-scored trending topics — ranked on 5 dimensions in real time</p>
+              <p style={{ fontSize: "14px", color: "var(--text2)" }}>ML-scored trending topics  -  ranked on 5 dimensions in real time</p>
             </div>
 
             {/* Controls */}
@@ -167,7 +167,7 @@ export default function TrendRanking() {
                   <TrendCard key={trend.topic} trend={trend} rank={i + 1} />
                 ))}
                 <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textAlign: "center", marginTop: "8px" }}>
-                  Click any trend to see full dimension breakdown · Scores powered by LLM analysis
+                  Click any trend to see full dimension breakdown . Scores powered by LLM analysis
                 </div>
               </div>
             )}

@@ -1,3 +1,26 @@
+# UTF-8 stdout/stderr so chars display correctly on Windows terminals
+import sys as _sys
+if hasattr(_sys.stdout, 'reconfigure'):
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(_sys.stderr, 'reconfigure'):
+    _sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+# Suppress noisy runtime warnings before any heavy imports
+import warnings, os as _os
+warnings.filterwarnings('ignore', category=UserWarning,  module='sklearn')
+warnings.filterwarnings('ignore', category=FutureWarning, module='sklearn')
+warnings.filterwarnings('ignore', category=UserWarning,  module='xgboost')
+warnings.filterwarnings('ignore', message='.*valid feature names.*')
+warnings.filterwarnings('ignore', message='.*Pickle support.*')        # XGBoost pickle
+warnings.filterwarnings('ignore', category=UserWarning, module='torch')
+
+# Silence HuggingFace / tokenizers startup chatter
+_os.environ.setdefault('TRANSFORMERS_VERBOSITY',           'error')
+_os.environ.setdefault('HF_HUB_DISABLE_PROGRESS_BARS',    '1')
+_os.environ.setdefault('HF_HUB_DISABLE_SYMLINKS_WARNING', '1')
+_os.environ.setdefault('TOKENIZERS_PARALLELISM',           'false')
+_os.environ.setdefault('TRANSFORMERS_NO_ADVISORY_WARNINGS','1')
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -9,14 +32,27 @@ from pathlib import Path
 from growth_predictor import GrowthPredictor
 from authenticity_detector import AuthenticityDetector
 from viral_predictor import ViralPredictor
+from trends_engine import fetch_google_trends, fetch_combined_trends
 from groq import Groq
 from dotenv import load_dotenv
 import requests as http_requests
 import base64
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import joblib
 
-load_dotenv()
+try:
+    import shap as _shap
+    _SHAP_AVAILABLE = True
+except ImportError:
+    _SHAP_AVAILABLE = False
+
+# Load .env robustly from backend directory
+_backend_env = Path(__file__).parent / '.env'
+if _backend_env.exists():
+    load_dotenv(_backend_env)
+else:
+    load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# CORS — read allowed origins from env
+# CORS  -  read allowed origins from env
 _cors_origins = [o.strip() for o in os.environ.get(
     "CORS_ORIGIN", "http://localhost:5173,http://localhost:5174"
 ).split(",")]
@@ -41,7 +77,7 @@ try:
     def rate_limit(rule):
         return _limiter.limit(rule)
 except ImportError:
-    logger.warning("flask-limiter not installed — rate limiting disabled")
+    logger.warning("flask-limiter not installed  -  rate limiting disabled")
 
     def rate_limit(rule):
         def decorator(f):
@@ -59,11 +95,68 @@ if not CREATORS_CSV.exists():
     logger.error(f"Real data not found at {CREATORS_CSV}. Please run model_test.ipynb first.")
     raise FileNotFoundError(f"Missing: {CREATORS_CSV}")
 
+# -- Ratefluencer meta-learner (trained XGBoost regressor) --------------------
+class _RatefluencerScorer:
+    """Loads the trained meta-learner that predicts composite score from raw features."""
+    def __init__(self):
+        self.model    = None
+        self.features = None
+        self.encoders = None
+        try:
+            self.model    = joblib.load(BACKEND_DIR / 'ratefluencer_model_v1.pkl')
+            self.features = joblib.load(BACKEND_DIR / 'ratefluencer_features_v1.pkl')
+            self.encoders = joblib.load(BACKEND_DIR / 'ratefluencer_encoders_v1.pkl')
+            logger.info("Ratefluencer meta-learner loaded")
+        except Exception as e:
+            logger.warning(f"Meta-learner not found  -  using weighted formula: {e}")
+
+    def predict(self, row: dict) -> float:
+        """Predict composite Ratefluencer score from raw creator metrics."""
+        if self.model is None:
+            return None
+        try:
+            followers = max(1, float(row.get('followers', 10000)))
+            er        = float(row.get('engagement_rate', 3.0))
+            posts     = float(row.get('posts', 50))
+            likes     = float(row.get('likes', followers * er / 100 * 0.9))
+            comments  = float(row.get('comments', followers * er / 100 * 0.1))
+            shares    = float(row.get('shares', max(1, likes * 0.1)))
+            reach     = float(row.get('reach', max(1, likes * 12)))
+            impr      = float(row.get('impressions', max(1, reach * 1.5)))
+            niche     = str(row.get('niche', 'lifestyle'))
+            tier      = str(row.get('tier', 'A'))
+
+            niche_enc = self.encoders['niche'].transform([[niche]])[0][0]
+            tier_enc  = self.encoders['tier'].transform([[tier]])[0][0]
+
+            feat_map = {
+                'log_followers':  math.log1p(followers),
+                'engagement_rate': er,
+                'posts':          posts,
+                'likes_per_f':    likes / followers,
+                'comments_per_f': comments / followers,
+                'shares_per_f':   shares / followers,
+                'reach_ratio':    reach / max(impr, 1),
+                'save_proxy':     shares * 0.8,
+                'niche_enc':      float(niche_enc),
+                'tier_enc':       float(tier_enc),
+            }
+            x = [feat_map.get(f, 0.0) for f in self.features]
+            score = float(self.model.predict([x])[0])
+            return round(clamp(score), 1)
+        except Exception as e:
+            logger.debug(f"Meta-learner inference failed: {e}")
+            return None
+
+
+_rf_scorer = None   # initialised after app setup
+
+
 logger.info("Initializing Ratefluencer AI Orchestrator inside Flask server...")
 logger.info(f"Using creators CSV from: {CREATORS_CSV}")
 viral_predictor = ViralPredictor()
 
-# ── Module-level creator name pools ─────────────────────────────────────────
+# -- Module-level creator name pools -----------------------------------------
 CREATOR_NAMES = [
     'Arjun','Priya','Rohan','Simran','Dev','Vikram','Neha','Karan','Aditi','Rahul','Pooja','Kabir'
 ]
@@ -108,7 +201,7 @@ def get_creator_name(creator_id, niche):
     return f"{first} {last}"
 
 
-# ── TF-IDF semantic brand matching ───────────────────────────────────────────
+# -- TF-IDF semantic brand matching -------------------------------------------
 _NICHE_EXPANSION = {
     'beauty':        'beauty skincare makeup glow serum cosmetic lipstick foundation moisturizer sunscreen blush eyeshadow toner',
     'wellness':      'wellness health yoga mindfulness mental organic holistic meditation ayurveda supplement detox vitality self-care',
@@ -151,6 +244,60 @@ def _init_tfidf():
         logger.warning(f"TF-IDF init failed: {e}")
 
 
+import threading as _threading
+_chroma_ready = _threading.Event()   # set when first batch of creators is indexed
+
+
+def _fast_seed_chromadb(brand_matcher, creators_df, n: int = 100):
+    """
+    Synchronously embed the top N creators (~2-4 s on CPU) so the very first
+    /api/match request uses semantic search immediately.
+    """
+    try:
+        top = creators_df[creators_df['fake_account'] == 0].nlargest(n, 'engagement_rate')
+        docs, ids, metas = [], [], []
+        for _, row in top.iterrows():
+            cid   = str(int(row['creator_id']))
+            niche = str(row.get('niche', 'general'))
+            er    = float(row.get('engagement_rate', 0))
+            flw   = int(row.get('followers', 0))
+            docs.append(f"Category/Niche: {niche}. Followers: {flw:,}. Engagement: {er:.2%}.")
+            ids.append(cid)
+            metas.append({'niche': niche, 'followers': flw,
+                          'engagement_rate': er, 'creator_id': int(row['creator_id']),
+                          'fake_account': 0})
+        embeddings = brand_matcher.embedding_model.encode(
+            docs, batch_size=64, show_progress_bar=False
+        ).tolist()
+        brand_matcher.collection.add(documents=docs, embeddings=embeddings, ids=ids, metadatas=metas)
+        _chroma_ready.set()
+        logger.info(f"ChromaDB seeded with top {len(docs)} creators - semantic search live")
+    except Exception as e:
+        logger.warning(f"ChromaDB fast seed failed: {e}")
+        _chroma_ready.set()   # unblock so normal requests continue
+
+
+def _populate_chromadb(brand_matcher, creators_df, backend_dir):
+    """
+    Background thread: full index of top 1500 creators via load_creators().
+    Replaces the fast-seed collection with a larger, richer one.
+    """
+    import os as _os
+    try:
+        top = creators_df[creators_df['fake_account'] == 0].nlargest(1500, 'engagement_rate')
+        tmp_path = str(Path(backend_dir) / 'top_creators_temp.csv')
+        top.to_csv(tmp_path, index=False, encoding='utf-8')
+        n = brand_matcher.load_creators(tmp_path)
+        try:
+            _os.unlink(tmp_path)
+        except Exception:
+            pass
+        _chroma_ready.set()
+        logger.info(f"ChromaDB fully indexed with {n} creators - semantic matching active")
+    except Exception as e:
+        logger.warning(f"ChromaDB full index failed (TF-IDF fallback active): {e}")
+
+
 class CsvEngine:
     def __init__(self, creators_csv):
         self.creators_csv = creators_csv
@@ -161,7 +308,15 @@ class CsvEngine:
         try:
             from brand_matcher_v2 import BrandMatcher
             self.brand_matcher = BrandMatcher(creators_csv=creators_csv)
-            logger.info("BrandMatcher initialized successfully")
+            # Phase 1: synchronously seed top 100 (~3s) so first request works immediately
+            _fast_seed_chromadb(self.brand_matcher, self.creators_df, n=100)
+            # Phase 2: background-expand to full 1500-creator index
+            _threading.Thread(
+                target=_populate_chromadb,
+                args=(self.brand_matcher, self.creators_df, BACKEND_DIR),
+                daemon=True,
+            ).start()
+            logger.info("BrandMatcher ready - ChromaDB seeded (100 creators), expanding in background")
         except Exception as e:
             logger.warning(f"BrandMatcher initialization failed: {e}")
             self.brand_matcher = None
@@ -178,33 +333,34 @@ else:
 
 logger.info(f"Dataset size: {len(engine.creators_df)} creators")
 
-# Initialize TF-IDF after engine is ready
+# Initialise meta-learner and TF-IDF after engine is ready
+_rf_scorer = _RatefluencerScorer()
 _init_tfidf()
 
-# ── Campaign store ───────────────────────────────────────────────────────────
+# -- Campaign store -----------------------------------------------------------
 campaigns_store = []
 
 DEMO_CAMPAIGNS = [
     {"id": "demo_1", "name": "Diwali Skincare Launch", "brand": "Nykaa", "goal": "Brand Awareness",
      "category_filters": ["Beauty","Wellness"], "campaign_text": "Skincare beauty wellness glow serum organic India women",
-     "budget": 1000000, "ageGroup": "18–34", "country": "India", "timestamp": "2026-06-01T10:00:00"},
+     "budget": 1000000, "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T10:00:00"},
     {"id": "demo_2", "name": "Protein Supplement Campaign", "brand": "MuscleBlaze", "goal": "Sales / Conversions",
      "category_filters": ["Fitness"], "campaign_text": "Fitness gym workout protein supplement muscle strength training",
-     "budget": 500000, "ageGroup": "18–34", "country": "India", "timestamp": "2026-06-01T11:00:00"},
+     "budget": 500000, "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T11:00:00"},
     {"id": "demo_3", "name": "Food Delivery App Launch", "brand": "Swiggy", "goal": "App Downloads",
      "category_filters": ["Food","Lifestyle"], "campaign_text": "Food delivery restaurant healthy meal cooking recipe India",
-     "budget": 750000, "ageGroup": "18–30", "country": "India", "timestamp": "2026-06-01T12:00:00"},
+     "budget": 750000, "ageGroup": "18-30", "country": "India", "timestamp": "2026-06-01T12:00:00"},
     {"id": "demo_4", "name": "Tech Gadget Unboxing", "brand": "OnePlus", "goal": "Product Launch",
      "category_filters": ["Tech","Gaming"], "campaign_text": "Technology gadget smartphone unboxing review tech product",
-     "budget": 2000000, "ageGroup": "18–34", "country": "India", "timestamp": "2026-06-01T13:00:00"},
+     "budget": 2000000, "ageGroup": "18-34", "country": "India", "timestamp": "2026-06-01T13:00:00"},
     {"id": "demo_5", "name": "Travel Booking Campaign", "brand": "MakeMyTrip", "goal": "Brand Awareness",
      "category_filters": ["Travel","Photography"], "campaign_text": "Travel adventure tourism destination photography explore India",
-     "budget": 1500000, "ageGroup": "25–44", "country": "India", "timestamp": "2026-06-01T14:00:00"},
+     "budget": 1500000, "ageGroup": "25-44", "country": "India", "timestamp": "2026-06-01T14:00:00"},
 ]
 campaigns_store.extend(DEMO_CAMPAIGNS)
 
 
-# ── Utility helpers ──────────────────────────────────────────────────────────
+# -- Utility helpers ----------------------------------------------------------
 def creator_identity(row):
     raw_name = str(row.get('creator_name') or f"creator_{int(row['creator_id'])}").strip()
     display_name = raw_name.lstrip('@') or f"creator_{int(row['creator_id'])}"
@@ -276,39 +432,60 @@ def prepare_growth_features(row):
 
 
 def prepare_authenticity_features(row):
-    followers = float(row.get('followers', 10000))
-    is_fake   = int(row.get('fake_account', 0)) == 1
+    """
+    Build the 16 model features from observed signals only.
+    Reads: followers, posts, engagement_rate, likes, comments, reach, impressions.
+    Prefers real CSV columns where present; falls back to data-driven proxies.
+    Never reads fake_account  -  that is the label, not a signal.
+    """
+    followers   = max(1.0, float(row.get('followers', 10000)))
+    posts       = max(1.0, float(row.get('posts', min(250, max(5, followers / 50)))))
+    er          = float(row.get('engagement_rate', 3.0))
+    if er < 1.0:
+        er *= 100.0
+    likes       = float(row.get('likes') or row.get('avg_likes') or max(1.0, followers * er / 100 * 0.9))
+    comments    = float(row.get('comments') or row.get('avg_comments') or max(1.0, followers * er / 100 * 0.1))
+    reach       = float(row.get('reach') or row.get('impressions') or max(1.0, likes * 12.0))
+    impressions = float(row.get('impressions') or max(1.0, reach * 1.5))
 
-    # pos=posts, flw=followers, flg=following
-    # Prefer real CSV columns before deriving proxies
-    following = float(row.get('following') or (followers * (1.5 if is_fake else 0.02)))
-    posts     = float(row.get('posts', 20 if is_fake else min(250, max(30, followers / 50))))
-    avg_hash  = float(row.get('avg_hashtags', 150 if is_fake else 15))
-    er_likes  = float(row.get('er_likes', 10 if is_fake else 1500))
-    er_cmts   = float(row.get('er_comments', 450 if is_fake else 5))
+    # Prefer real columns when the data source provides them
+    following  = float(row.get('following') or (followers * max(0.01, min(3.0, 0.04 + max(0.0, (3.5 - er) * 0.12)))))
+    avg_hash   = float(row.get('avg_hashtags') or 15.0)
+    er_likes   = float(row.get('er_likes')    or likes    / followers * 100)
+    er_cmts    = float(row.get('er_comments') or comments / followers * 100)
+
+    fo_est     = following / max(followers, 1)
+    reach_ratio = reach / max(impressions, 1)
+    cs_est     = max(0.02, min(0.95, 0.6 - reach_ratio * 0.4 - er * 0.03))
+    pr_est     = min(0.97, max(0.10, er / 12.0 + min(posts, 200) / 400.0 + 0.25))
+    eng_per_reach = (likes + comments) / max(reach, 1)
+    cl_est     = max(0, min(90, int((0.05 - eng_per_reach) * 1000)))
+    ni_est     = min(10, max(1, int(posts / 25)))
+    lin_est    = 1.0 if er >= 2.0 else 0.0
+    pi_est     = 1.0 if posts >= 10 else 0.0
 
     return {
-        'pos': posts,                               # posts count
-        'flw': followers,                           # followers
-        'flg': following,                           # following
-        'bl':  float(80 if is_fake else 0),         # blocked users signal
-        'lin': float(0 if is_fake else 1),          # link in bio
-        'cl':  float(85 if is_fake else 5),         # clickbait level
-        'cz':  float(95 if is_fake else 2),         # content similarity
-        'ni':  float(1 if is_fake else 10),         # name integrity
-        'erl': er_likes,                            # er_likes
-        'erc': er_cmts,                             # er_comments
-        'lt':  float(2 if is_fake else 1),          # link type
-        'hc':  avg_hash,                            # hashtag count
-        'pr':  float(0.1 if is_fake else 0.95),     # profile completeness
-        'fo':  float(following / (followers + 1.0)),# follow ratio
-        'cs':  float(0.95 if is_fake else 0.2),     # content spam score
-        'pi':  float(0 if is_fake else 1),          # profile image present
+        'pos': min(250, max(5, posts / 50)),
+        'flw': followers,
+        'flg': following,
+        'bl':  float(row.get('blocked_count', 0)),
+        'lin': float(row.get('link_in_bio', lin_est)),
+        'cl':  float(row.get('clickbait_level', cl_est)),
+        'cz':  float(row.get('description_changes', 5.0)),
+        'ni':  float(row.get('name_integrity', ni_est)),
+        'erl': er_likes,
+        'erc': er_cmts,
+        'lt':  float(row.get('link_type', 1.0)),
+        'hc':  avg_hash,
+        'pr':  float(row.get('profile_completeness', pr_est)),
+        'fo':  fo_est,
+        'cs':  float(row.get('content_similarity', cs_est)),
+        'pi':  float(row.get('has_profile_image', pi_est)),
     }
 
 
 def live_brand_match(row, campaign_text, category_filters):
-    """Keyword-based brand match — used as final fallback."""
+    """Keyword-based brand match  -  used as final fallback."""
     text = (campaign_text or "").lower()
     niche = str(row.get('niche', '')).lower()
     selected = {str(cat).lower() for cat in category_filters or []}
@@ -428,12 +605,19 @@ def generated_scores(row, campaign_text, category_filters, campaign_goal):
     else:
         weights = {'brand': 0.40, 'growth': 0.20, 'auth': 0.20, 'engagement': 0.20}
 
-    final = (
+    weighted_final = (
         brand_match * weights['brand'] +
         growth      * weights['growth'] +
         authenticity * weights['auth'] +
         engagement  * weights['engagement']
     )
+
+    # Blend with meta-learner when available (60% ML, 40% formula)
+    ml_score = _rf_scorer.predict(row) if _rf_scorer else None
+    if ml_score is not None:
+        final = ml_score * 0.60 + weighted_final * 0.40
+    else:
+        final = weighted_final
 
     if is_fake or risk_level == 'High':
         final *= 0.3
@@ -543,7 +727,7 @@ def csv_recommendations(category_filters=None, min_auth_val=0, tier_min=0, tier_
     ]
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+# -- Routes -------------------------------------------------------------------
 @app.route("/")
 def home():
     return "Ratefluencer AI Model Server Running Successfully"
@@ -649,6 +833,11 @@ def search_creators():
             c_name, c_handle = creator_identity(row)
             followers_val = int(row['followers'])
 
+            er_raw     = float(row['engagement_rate'])
+            shares_raw = float(row.get('shares', followers_val * er_raw / 100 * 0.15))
+            saves_raw  = round(shares_raw * 0.8)
+            niche_key  = str(row['niche']).lower()
+
             result_list.append({
                 "id": creator_id,
                 "name": c_name,
@@ -656,13 +845,16 @@ def search_creators():
                 "cat": str(row['niche']),
                 "followers": format_followers(followers_val),
                 "followersRaw": followers_val,
-                "er": f"{float(row['engagement_rate']):.1f}%",
-                "erRaw": float(row['engagement_rate']),
+                "er": f"{er_raw:.1f}%",
+                "erRaw": er_raw,
                 "auth": int(row['authenticity_score']),
                 "growth": int(row['growth_score']),
                 "score": int(row['growth_score'] * 0.5 + row['authenticity_score'] * 0.5),
                 "fake": int(row['fake_account']),
                 "av": creator_initials(c_name),
+                "saves": int(saves_raw),
+                "saves_str": f"{int(saves_raw/1000)}K" if saves_raw >= 1000 else str(int(saves_raw)),
+                "demographics": get_audience_demographics(niche_key),
             })
 
         return jsonify({
@@ -723,7 +915,7 @@ def match_creators():
             )
             top_matches = match_results['top_matches']
         except Exception as e:
-            logger.warning(f"Semantic matcher failed, using CSV fallback: {e}")
+            logger.info(f"Semantic matcher unavailable (ChromaDB warming up or not installed), using CSV fallback: {type(e).__name__}")
             top_matches = []
 
         formatted_recos = []
@@ -788,14 +980,14 @@ def match_creators():
                 ring_color = '#F0C96A'
 
             ring_offset = int(201 * (1.0 - (final_score / 100.0)))
-            why_text    = f"❆ Category similarity of {score_res['scores']['brand_match_score']:.0f}% with verified {risk_level.lower()} fraud risk."
+            why_text    = f"* Category similarity of {score_res['scores']['brand_match_score']:.0f}% with verified {risk_level.lower()} fraud risk."
             badge_val   = "\U0001f451 #1 Match" if len(formatted_recos) == 0 else None
 
             formatted_recos.append({
                 "rank": len(formatted_recos) + 1,
                 "name": c_name,
                 "handle": c_handle,
-                "meta": f"{niche} · {followers_str} followers · Instagram",
+                "meta": f"{niche} . {followers_str} followers . Instagram",
                 "badge": badge_val,
                 "ratefluencer": final_score,
                 "growth": virality,
@@ -815,7 +1007,7 @@ def match_creators():
                 break
 
         if len(formatted_recos) < top_k:
-            logger.info(f"Only {len(formatted_recos)} matches — filling with CSV fallback for {category_filters}")
+            logger.info(f"Only {len(formatted_recos)} matches  -  filling with CSV fallback for {category_filters}")
             formatted_recos = csv_recommendations(
                 category_filters=category_filters,
                 min_auth_val=min_auth_val,
@@ -851,13 +1043,13 @@ def match_creators():
             )
             if suspicious_found:
                 insights.append({
-                    "icon": "⚠️",
+                    "icon": "\u26a0\ufe0f",
                     "title": "Fraud Alert",
                     "text": "Suspicious bot accounts were detected and excluded from recommendations. The XGBoost model flagged unnatural follower ratios in the candidate pool."
                 })
             else:
                 insights.append({
-                    "icon": "\U0001f6e1️",
+                    "icon": "\U0001f6e1\ufe0f",
                     "title": "Safety Verified",
                     "text": "All top recommended profiles are confirmed authentic (Low Risk) by the XGBoost fraud detection model."
                 })
@@ -866,7 +1058,7 @@ def match_creators():
             insights.append({
                 "icon": "\U0001f4a1",
                 "title": "Niche Opportunity",
-                "text": f"Micro-creators in the {primary_cat} category show a 2.5× higher save rate and 15% lower CPC than mega-influencers."
+                "text": f"Micro-creators in the {primary_cat} category show a 2.5x higher save rate and 15% lower CPC than mega-influencers."
             })
 
         campaign_entry = {
@@ -877,7 +1069,7 @@ def match_creators():
             "category_filters": category_filters or [],
             "campaign_text": campaign_text,
             "budget": data.get("budget", 1000000),
-            "ageGroup": data.get("ageGroup", "18–34"),
+            "ageGroup": data.get("ageGroup", "18-34"),
             "country": "India",
             "timestamp": pd.Timestamp.now().isoformat(),
         }
@@ -939,8 +1131,8 @@ def creator_match():
                     "goal":         camp.get("goal", "Brand Awareness"),
                     "categories":   camp.get("category_filters", []),
                     "budget_label": (
-                        f"₹{budget/100000:.0f}L" if budget >= 100000
-                        else f"₹{budget:,}"
+                        f"\u20b9{budget/100000:.0f}L" if budget >= 100000
+                        else f"\u20b9{budget:,}"
                     ),
                     "match_score": match_pct,
                     "why": (
@@ -1048,16 +1240,28 @@ def generate_content():
         best_days    = insights.get('best_days', ['Wednesday', 'Friday'])
         opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
         best_media   = insights.get('best_media_type', 'reel')
+        style_prefs  = compute_style_preferences(content_category)
 
         logger.info(f"Generating viral content for topic: '{topic}'")
+
+        learned_block = ""
+        if style_prefs.get('total_upvoted', 0) >= 3:
+            learned_block = (
+                f"\n\nUser feedback learning ({style_prefs['total_upvoted']} upvoted posts, "
+                f"avg virality {style_prefs['avg_virality']}):\n"
+                f"- Preferred style words: {', '.join(style_prefs.get('preferred_words', []))}\n"
+                f"- Optimal hashtags (from history): ~{style_prefs.get('avg_hashtags', opt_hashtags[0])}"
+            )
+            if style_prefs.get('avoid_words'):
+                learned_block += f"\n- Avoid these overused words: {', '.join(style_prefs['avoid_words'])}"
 
         prompt = f"""You are a viral social media content strategist specialising in Instagram Reels.
 Generate {tone.lower()} viral content for this topic: "{topic}"
 
 Data-driven context from real Instagram analytics (30K posts):
-- Best posting hours: {best_hours[0]}:00–{best_hours[-1]}:00
-- Optimal hashtag count: {opt_hashtags[0]}–{opt_hashtags[1]}
-- Best performing format: {best_media}
+- Best posting hours: {best_hours[0]}:00-{best_hours[-1]}:00
+- Optimal hashtag count: {opt_hashtags[0]}-{opt_hashtags[1]}
+- Best performing format: {best_media}{learned_block}
 
 Return ONLY a valid JSON object with these exact keys (no extra text):
 {{
@@ -1114,7 +1318,7 @@ VIRALITY_THRESHOLD = 68
 @app.route("/api/run-agent", methods=["POST"])
 @rate_limit("20/hour")
 def run_agent():
-    """Autonomous agent: trend discovery → creator selection (argmax) → content refinement loop."""
+    """Autonomous agent: trend discovery -> creator selection (argmax) -> content refinement loop."""
     try:
         data = request.get_json() or {}
         goal = data.get("goal", "").strip()
@@ -1124,32 +1328,50 @@ def run_agent():
 
         logger.info(f"Running autonomous agent for goal: '{goal}'")
 
-        # Step 1 — Discover trend
-        trend_prompt = f"""You are a real-time social media trend analyst monitoring Reddit, LinkedIn, YouTube, Twitter, and News platforms.
-For this campaign goal: "{goal}"
+        # Step 1a  -  Detect category from goal (lightweight LLM call)
+        cat_prompt = f"""Given this campaign goal: "{goal}"
+Return ONLY JSON: {{"category": "<one of: Fitness, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>"}}"""
+        try:
+            cat_resp = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": cat_prompt}],
+                temperature=0.2,
+                max_tokens=50,
+            )
+            cat_data = _parse_groq_json(cat_resp.choices[0].message.content.strip())
+            detected_category = cat_data.get("category", "Lifestyle")
+        except Exception:
+            detected_category = "Lifestyle"
 
-Identify the single most relevant CURRENTLY TRENDING topic right now (as of {pd.Timestamp.now().strftime('%B %Y')}).
-Consider what's trending on: Reddit (r/entrepreneur, r/marketing, r/fitness etc), LinkedIn trending posts, YouTube Shorts trends, Google Trends, and major news.
+        # Step 1b  -  Real trend from Google Trends
+        gt_trends = fetch_combined_trends(detected_category)
+        logger.info(f"Agent: Google Trends returned {len(gt_trends)} results for '{detected_category}'")
 
-Return ONLY JSON (no other text):
-{{"trend": "<specific trending topic with context — 1-2 sentences>",
-  "source": "<where this trend is hottest: Reddit/LinkedIn/YouTube/News/TikTok>",
-  "category": "<one of: Fitness, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>",
-  "growth_signal": "<why this is trending now in 10 words>"}}"""
+        if gt_trends:
+            top_gt       = gt_trends[0]
+            trend        = top_gt['topic']
+            trend_source = "Google Trends"
+            trend_signal = top_gt['why_trending']
+        else:
+            # LLM fallback for trend discovery
+            trend_prompt = f"""You are a social media trend analyst.
+For campaign goal: "{goal}" (category: {detected_category}), identify the single most relevant trending topic right now ({pd.Timestamp.now().strftime('%B %Y')}).
+Return ONLY JSON: {{"trend": "<topic>", "source": "<platform>", "growth_signal": "<why in 10 words>"}}"""
+            try:
+                trend_resp = groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": trend_prompt}],
+                    temperature=0.5,
+                    max_tokens=200,
+                )
+                trend_data   = _parse_groq_json(trend_resp.choices[0].message.content.strip())
+                trend        = trend_data.get("trend", "Sustainable lifestyle content surging across Gen-Z.")
+                trend_source = trend_data.get("source", "Social Media")
+                trend_signal = trend_data.get("growth_signal", "")
+            except Exception:
+                trend, trend_source, trend_signal = "Authentic micro-content", "Social Media", ""
 
-        trend_resp = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": trend_prompt}],
-            temperature=0.5,
-            max_tokens=200,
-        )
-        trend_data      = _parse_groq_json(trend_resp.choices[0].message.content.strip())
-        trend           = trend_data.get("trend", "Sustainable lifestyle content is surging across Gen-Z audiences.")
-        detected_category = trend_data.get("category", "Lifestyle")
-        trend_source    = trend_data.get("source", "Social Media")
-        trend_signal    = trend_data.get("growth_signal", "")
-
-        # Step 2 — Score top 20 candidates; select argmax Ratefluencer score
+        # Step 2  -  Score top 20 candidates; select argmax Ratefluencer score
         df = engine.creators_df.copy()
         cat_lower = detected_category.lower()
         cat_df = df[
@@ -1195,20 +1417,29 @@ Return ONLY JSON (no other text):
         best_hours   = insights.get('best_hours', [18, 12])
         best_days    = insights.get('best_days', ['Wednesday', 'Friday'])
         opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
+        agent_style  = compute_style_preferences(detected_category)
 
-        # Step 3 — Content refinement loop
+        # Step 3  -  Content refinement loop
+        agent_learned = ""
+        if agent_style.get('total_upvoted', 0) >= 3:
+            agent_learned = (
+                f"\nLearned from {agent_style['total_upvoted']} previously upvoted posts: "
+                f"preferred words [{', '.join(agent_style.get('preferred_words', [])[:3])}], "
+                f"optimal ~{agent_style.get('avg_hashtags', 8)} hashtags."
+            )
+
         content_prompt_base = f"""You are a viral content creator for Instagram and LinkedIn.
 Campaign goal: {goal}
 Trending topic: {trend}
 Assigned influencer: {influencer_name} (niche: {influencer_niche})
-Data insight: Best Instagram posting time is {best_hours[0]}:00 on {best_days[0]}, use {opt_hashtags[0]}–{opt_hashtags[1]} hashtags
+Data insight: Best Instagram posting time is {best_hours[0]}:00 on {best_days[0]}, use {opt_hashtags[0]}-{opt_hashtags[1]} hashtags{agent_learned}
 
 Generate content for BOTH platforms tailored to this influencer and trend.
 Return ONLY JSON (no other text):
 {{
   "reel_idea": "<creative 1-2 sentence Instagram reel concept>",
   "caption": "<engaging Instagram caption under 100 words with a clear CTA>",
-  "linkedin_hook": "<one punchy LinkedIn opening line — max 15 words>",
+  "linkedin_hook": "<one punchy LinkedIn opening line  -  max 15 words>",
   "linkedin_post": "<professional LinkedIn post 100-150 words with insights and CTA>",
   "linkedin_hashtags": "<5-7 professional LinkedIn hashtags>"
 }}"""
@@ -1265,9 +1496,9 @@ Return ONLY JSON (no other text):
             if v_score >= VIRALITY_THRESHOLD or content_iter == MAX_CONTENT_ITERS - 1:
                 break
 
-            # Extract first ↑ tip as refinement hint for next iteration
+            # Extract first ^ tip as refinement hint for next iteration
             tips = viral_res.get('optimization_tips', [])
-            refinement_hint = next((t[:60] for t in tips if '↑' in t), None)
+            refinement_hint = next((t[:60] for t in tips if '^' in t), None)
 
         if best_content is None:
             best_content = {}
@@ -1398,6 +1629,10 @@ def real_creators():
             tier  = row.get('tier', 'S' if followers_val > 500_000 else 'A' if followers_val > 100_000 else 'B')
             c1, c2 = palettes[i % len(palettes)]
 
+            niche_key = str(row.get('niche', 'lifestyle')).lower()
+            shares_val = float(row.get('shares', followers_val * er / 100 * 0.15))
+            saves_val  = round(shares_val * 0.8)
+
             results.append({
                 'id':       int(row['creator_id']),
                 'name':     c_name,
@@ -1414,6 +1649,9 @@ def real_creators():
                 'c2':        c2,
                 'platform':  'Instagram',
                 'real':      True,
+                'saves':     int(saves_val),
+                'saves_str': f"{int(saves_val/1000)}K" if saves_val >= 1000 else str(int(saves_val)),
+                'demographics': get_audience_demographics(niche_key),
             })
 
         return jsonify({'results': results, 'total': len(results), 'real': True}), 200
@@ -1493,7 +1731,7 @@ Return ONLY valid JSON:
             "optimization_tips":    score_result.get('optimization_tips', []),
             "best_hours":           score_result.get('best_hours', [18, 12, 20]),
             "best_days":            score_result.get('best_days', ['Wednesday', 'Friday']),
-            "optimal_hashtag_range": score_result.get('optimal_hashtag_range', '6–15'),
+            "optimal_hashtag_range": score_result.get('optimal_hashtag_range', '6-15'),
             "your_hashtag_count":   hashtag_count,
             "your_caption_length":  caption_len,
             "has_cta":              bool(has_cta),
@@ -1542,7 +1780,7 @@ def generate_linkedin():
                 c = best_up.get('content', {})
                 if c.get('hook') or c.get('caption'):
                     few_shot_block += (
-                        "\n\nUSER-VALIDATED EXAMPLE (high virality — match this style):"
+                        "\n\nUSER-VALIDATED EXAMPLE (high virality  -  match this style):"
                         f"\nHook: {c.get('hook', '')}"
                         f"\nCaption excerpt: {str(c.get('caption', ''))[:200]}"
                     )
@@ -1559,7 +1797,7 @@ Tone: {tone}. Industry: {category}.{few_shot_block}
 
 Return ONLY a valid JSON object:
 {{
-  "hook": "<one punchy opening line that stops the scroll — max 15 words>",
+  "hook": "<one punchy opening line that stops the scroll  -  max 15 words>",
   "post": "<full LinkedIn post: hook + 3-4 insight paragraphs + CTA. Use line breaks. 150-250 words>",
   "caption": "<professional summary caption under 50 words>",
   "hashtags": "<{opt_hashtags[0]} to {opt_hashtags[1]} professional LinkedIn hashtags>",
@@ -1578,7 +1816,7 @@ Return ONLY a valid JSON object:
             return jsonify({"error": "Failed to parse AI response"}), 500
 
         result['platform']       = 'LinkedIn'
-        result['best_post_time'] = "Tuesday–Thursday, 8:00–10:00 AM"
+        result['best_post_time'] = "Tuesday-Thursday, 8:00-10:00 AM"
         return jsonify(result), 200
 
     except Exception as e:
@@ -1589,44 +1827,89 @@ Return ONLY a valid JSON object:
 @app.route("/api/trend-ranking", methods=["POST"])
 @rate_limit("20/hour")
 def trend_ranking():
-    """Discover and rank trending topics on 5 ML-scored dimensions."""
+    """
+    Discover and rank trending topics.
+    Primary: Google Trends (pytrends)  -  real interest data from India.
+    Enrichment: LLM adds descriptions and engagement context.
+    Fallback: pure LLM when pytrends is unavailable or rate-limited.
+    """
     try:
         data     = request.get_json() or {}
         category = data.get("category", "General")
         goal     = data.get("goal", "")
 
-        prompt = f"""You are a real-time trend intelligence engine monitoring multiple platforms.
-As of {pd.Timestamp.now().strftime('%B %Y')}, identify 5 CURRENTLY TRENDING topics for the {category} category{' for goal: ' + goal if goal else ''}.
+        # -- Step 1: real Google Trends data ----------------------------------
+        gt_trends = fetch_combined_trends(category)
+        logger.info(f"Google Trends returned {len(gt_trends)} results for '{category}'")
 
-Sources to consider: Reddit trending posts, LinkedIn viral content, YouTube Shorts trends,
-Google Trends, Twitter/X topics, Instagram Explore, news headlines.
+        if gt_trends:
+            # Enrich with LLM descriptions
+            topics_list = "\n".join(
+                f"- {t['topic']} (interest={t['current_interest']}, velocity={t['growth_velocity']})"
+                for t in gt_trends
+            )
+            enrich_prompt = f"""You are a social media strategist.
+These topics are currently trending on Google in India for the {category} category:
+{topics_list}
 
-Score each trend using ML-style multi-factor analysis (0-100):
-- growth_velocity: Rate of growth in last 7 days across platforms
-- engagement_potential: Expected likes/comments/shares based on category benchmarks
-- novelty: How fresh/new this topic is (100=brand new, 0=oversaturated)
-- audience_relevance: Relevance to {category} audience demographics
-- search_interest: Current Google/platform search volume signals
-
-Trend score = (growth_velocity*0.3 + engagement_potential*0.25 + novelty*0.2 + audience_relevance*0.15 + search_interest*0.1)
+For EACH topic, provide:
+- A 1-sentence description of why it's trending and who cares
+- engagement_potential score 0-100 for Instagram/LinkedIn content
+- audience_relevance score 0-100 for {category} creators
 
 Return ONLY valid JSON:
-{{
-  "trends": [
-    {{
-      "topic": "<specific trend name>",
-      "description": "<1 sentence description>",
-      "source": "<Reddit/LinkedIn/YouTube/Twitter/News>",
-      "growth_velocity": <0-100>,
-      "engagement_potential": <0-100>,
-      "novelty": <0-100>,
-      "audience_relevance": <0-100>,
-      "search_interest": <0-100>,
-      "trend_score": <weighted 0-100>,
-      "why": "<why trending now in 1 sentence>"
-    }}
-  ]
-}}"""
+{{"enriched": [
+  {{"topic": "<exact topic from list>", "description": "<1 sentence>",
+    "engagement_potential": <0-100>, "audience_relevance": <0-100>}}
+]}}"""
+
+            try:
+                enrich_resp = groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": enrich_prompt}],
+                    temperature=0.4,
+                    max_tokens=600,
+                )
+                enrich_data = _parse_groq_json(enrich_resp.choices[0].message.content.strip())
+                enriched_map = {
+                    e['topic'].lower(): e
+                    for e in enrich_data.get('enriched', [])
+                }
+            except Exception:
+                enriched_map = {}
+
+            trends = []
+            for t in gt_trends:
+                enrich = enriched_map.get(t['topic'].lower(), {})
+                trends.append({
+                    "topic":               t['topic'],
+                    "description":         enrich.get('description', t['why_trending']),
+                    "source":              "Google Trends",
+                    "growth_velocity":     t['growth_velocity'],
+                    "engagement_potential": enrich.get('engagement_potential', min(100, t['trend_score'] + 5)),
+                    "novelty":             t['novelty'],
+                    "audience_relevance":  enrich.get('audience_relevance', min(100, t['audience_fit'])),
+                    "search_interest":     t['current_interest'],
+                    "trend_score":         t['trend_score'],
+                    "why":                 enrich.get('description', t['why_trending']),
+                    "data_backed":         True,
+                })
+            return jsonify({"trends": trends, "category": category, "source": "Google Trends"}), 200
+
+        # -- Step 2: LLM fallback ----------------------------------------------
+        logger.info("Google Trends unavailable  -  using LLM fallback for trend ranking")
+        prompt = f"""You are a real-time trend intelligence engine.
+As of {pd.Timestamp.now().strftime('%B %Y')}, identify 5 CURRENTLY TRENDING topics for the {category} category{' for goal: ' + goal if goal else ''}.
+
+Score each trend (0-100):
+- growth_velocity, engagement_potential, novelty, audience_relevance, search_interest
+- trend_score = (growth_velocity*0.3 + engagement_potential*0.25 + novelty*0.2 + audience_relevance*0.15 + search_interest*0.1)
+
+Return ONLY valid JSON:
+{{"trends": [{{"topic": "<name>", "description": "<1 sentence>", "source": "<platform>",
+  "growth_velocity": <n>, "engagement_potential": <n>, "novelty": <n>,
+  "audience_relevance": <n>, "search_interest": <n>, "trend_score": <n>,
+  "why": "<why now>"}}]}}"""
 
         resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -1639,7 +1922,7 @@ Return ONLY valid JSON:
             return jsonify({"error": "Failed to parse trends"}), 500
 
         trends = sorted(result.get("trends", []), key=lambda t: t.get("trend_score", 0), reverse=True)
-        return jsonify({"trends": trends, "category": category}), 200
+        return jsonify({"trends": trends, "category": category, "source": "LLM"}), 200
 
     except Exception as e:
         logger.error(f"Trend ranking failed: {e}")
@@ -1694,6 +1977,622 @@ def voiceover():
 
     except Exception as e:
         logger.error(f"Voiceover failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# -- Audience demographics by niche -------------------------------------------
+NICHE_DEMOGRAPHICS = {
+    'beauty':        {'18-24': 38, '25-34': 34, '35-44': 18, '45+': 10, 'female': 82, 'male': 18},
+    'fashion':       {'18-24': 35, '25-34': 36, '35-44': 20, '45+':  9, 'female': 72, 'male': 28},
+    'fitness':       {'18-24': 30, '25-34': 38, '35-44': 22, '45+': 10, 'female': 52, 'male': 48},
+    'food':          {'18-24': 28, '25-34': 35, '35-44': 24, '45+': 13, 'female': 58, 'male': 42},
+    'travel':        {'18-24': 25, '25-34': 40, '35-44': 25, '45+': 10, 'female': 55, 'male': 45},
+    'tech':          {'18-24': 32, '25-34': 42, '35-44': 18, '45+':  8, 'female': 30, 'male': 70},
+    'gaming':        {'18-24': 45, '25-34': 35, '35-44': 14, '45+':  6, 'female': 28, 'male': 72},
+    'wellness':      {'18-24': 30, '25-34': 38, '35-44': 22, '45+': 10, 'female': 68, 'male': 32},
+    'finance':       {'18-24': 22, '25-34': 40, '35-44': 28, '45+': 10, 'female': 38, 'male': 62},
+    'education':     {'18-24': 42, '25-34': 35, '35-44': 16, '45+':  7, 'female': 52, 'male': 48},
+    'entertainment': {'18-24': 40, '25-34': 33, '35-44': 18, '45+':  9, 'female': 55, 'male': 45},
+    'sports':        {'18-24': 30, '25-34': 38, '35-44': 22, '45+': 10, 'female': 35, 'male': 65},
+    'music':         {'18-24': 38, '25-34': 34, '35-44': 18, '45+': 10, 'female': 50, 'male': 50},
+    'comedy':        {'18-24': 38, '25-34': 35, '35-44': 18, '45+':  9, 'female': 48, 'male': 52},
+    'lifestyle':     {'18-24': 32, '25-34': 36, '35-44': 22, '45+': 10, 'female': 62, 'male': 38},
+    'photography':   {'18-24': 28, '25-34': 40, '35-44': 22, '45+': 10, 'female': 48, 'male': 52},
+}
+_DEFAULT_DEMO = {'18-24': 32, '25-34': 36, '35-44': 22, '45+': 10, 'female': 55, 'male': 45}
+
+
+def get_audience_demographics(niche: str) -> dict:
+    key = (niche or '').lower().strip()
+    demo = NICHE_DEMOGRAPHICS.get(key, _DEFAULT_DEMO)
+    return {
+        'age_groups': [
+            {'label': '18-24', 'pct': demo['18-24']},
+            {'label': '25-34', 'pct': demo['25-34']},
+            {'label': '35-44', 'pct': demo['35-44']},
+            {'label': '45+',   'pct': demo['45+']},
+        ],
+        'gender': {'female': demo['female'], 'male': demo['male']},
+        'primary_age': max(['18-24', '25-34', '35-44', '45+'], key=lambda k: demo[k]),
+        'primary_gender': 'Female' if demo['female'] >= 50 else 'Male',
+    }
+
+
+# -- Feedback persistence ------------------------------------------------------
+FEEDBACK_FILE = BACKEND_DIR / 'feedback_store.json'
+
+
+def _load_feedback() -> list:
+    try:
+        if FEEDBACK_FILE.exists():
+            return json.loads(FEEDBACK_FILE.read_text(encoding='utf-8'))
+    except Exception:
+        pass
+    return []
+
+
+def _save_feedback(entries: list):
+    try:
+        FEEDBACK_FILE.write_text(
+            json.dumps(entries[-200:], ensure_ascii=False, indent=2),
+            encoding='utf-8'
+        )
+    except Exception as e:
+        logger.warning(f"Could not write feedback: {e}")
+
+
+def compute_style_preferences(category: str = '') -> dict:
+    """
+    Derive content style preferences from persisted feedback.
+    Returns a dict that gets injected into generation prompts so the agent
+    actually improves over time  -  not just stores data.
+    """
+    entries = _load_feedback()
+    if not entries:
+        return {}
+
+    if category:
+        cat_entries = [e for e in entries if e.get('category', '').lower() == category.lower()]
+        entries = cat_entries if len(cat_entries) >= 3 else entries
+
+    upvoted   = [e for e in entries if e.get('vote') == 'up']
+    downvoted = [e for e in entries if e.get('vote') == 'down']
+
+    if not upvoted:
+        return {}
+
+    # Extract patterns from upvoted content
+    avg_virality = sum(
+        e.get('virality', 65) for e in upvoted if e.get('virality')
+    ) / max(len(upvoted), 1)
+
+    # Most common words in upvoted hooks/captions
+    from collections import Counter
+    all_words: list = []
+    for e in upvoted:
+        text = ' '.join([
+            str(e.get('content', {}).get('hook', '')),
+            str(e.get('content', {}).get('caption', '')),
+        ])
+        all_words.extend(w.lower() for w in text.split() if len(w) > 4)
+
+    word_freq  = Counter(all_words)
+    top_words  = [w for w, _ in word_freq.most_common(8)]
+
+    # Words to avoid from downvoted content
+    avoid_words: list = []
+    for e in downvoted[-5:]:
+        text = str(e.get('content', {}).get('hook', ''))
+        avoid_words.extend(w.lower() for w in text.split() if len(w) > 4)
+
+    # Avg hashtag count in upvoted content
+    hashtag_counts = [
+        len(str(e.get('content', {}).get('hashtags', '')).split())
+        for e in upvoted
+    ]
+    avg_hashtags = int(sum(hashtag_counts) / max(len(hashtag_counts), 1))
+
+    return {
+        'avg_virality':    round(avg_virality, 1),
+        'preferred_words': top_words[:5],
+        'avoid_words':     list(set(avoid_words))[:3],
+        'avg_hashtags':    avg_hashtags,
+        'total_upvoted':   len(upvoted),
+        'total_downvoted': len(downvoted),
+    }
+
+
+@app.route("/api/feedback", methods=["POST"])
+def save_feedback():
+    """Persist content feedback (thumbs up/down) server-side for future improvement."""
+    try:
+        data = request.get_json() or {}
+        entry = {
+            'key':      str(data.get('key', '')),
+            'vote':     str(data.get('vote', '')),          # 'up' | 'down'
+            'virality': data.get('virality'),
+            'niche':    str(data.get('niche', '')),
+            'category': str(data.get('category', '')),
+            'content':  data.get('content', {}),            # hook, caption, hashtags
+            'ts':       pd.Timestamp.now().isoformat(),
+        }
+        if not entry['vote'] in ('up', 'down'):
+            return jsonify({"error": "vote must be 'up' or 'down'"}), 400
+
+        entries = _load_feedback()
+        entries.append(entry)
+        _save_feedback(entries)
+        return jsonify({"ok": True, "total": len(entries)}), 200
+
+    except Exception as e:
+        logger.error(f"save_feedback failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/feedback/history")
+def feedback_history():
+    """Return persisted feedback; optionally filtered by category."""
+    try:
+        category = request.args.get('category', '')
+        entries  = _load_feedback()
+        if category:
+            entries = [e for e in entries if e.get('category', '').lower() == category.lower()]
+        upvoted   = [e for e in entries if e.get('vote') == 'up']
+        downvoted = [e for e in entries if e.get('vote') == 'down']
+        return jsonify({
+            "total":     len(entries),
+            "upvoted":   len(upvoted),
+            "downvoted": len(downvoted),
+            "history":   entries[-50:],
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -- India influencer rate benchmarks -----------------------------------------
+_TIER_RATES = {
+    'nano':  {'label': 'Nano (1K-10K)',   'cpp': (3_000,   8_000),   'cpm': (60, 100)},
+    'micro': {'label': 'Micro (10K-100K)','cpp': (8_000,  50_000),   'cpm': (45,  80)},
+    'macro': {'label': 'Macro (100K-1M)', 'cpp': (50_000, 300_000),  'cpm': (30,  60)},
+    'mega':  {'label': 'Mega (1M+)',      'cpp': (300_000,2_000_000),'cpm': (20,  45)},
+}
+
+_NICHE_CPM_MULTIPLIER = {
+    'beauty': 1.2, 'fashion': 1.15, 'fitness': 1.1, 'tech': 1.2,
+    'food': 1.0, 'travel': 1.05, 'finance': 1.3, 'wellness': 1.1,
+    'entertainment': 0.9, 'gaming': 1.0, 'education': 1.15,
+}
+
+
+def _get_tier_key(followers: int) -> str:
+    if followers < 10_000:   return 'nano'
+    if followers < 100_000:  return 'micro'
+    if followers < 1_000_000: return 'macro'
+    return 'mega'
+
+
+@app.route("/api/groq-status")
+def groq_status():
+    """Check whether a Groq API key is configured."""
+    key = os.environ.get("GROQ_API_KEY", "")
+    return jsonify({"available": bool(key and key.startswith("gsk_"))}), 200
+
+
+@app.route("/api/set-groq-key", methods=["POST"])
+def set_groq_key():
+    """Set the Groq API key at runtime (in-memory only)."""
+    try:
+        data = request.get_json() or {}
+        key  = str(data.get("key", "")).strip()
+        if not key:
+            return jsonify({"error": "key is required"}), 400
+        os.environ["GROQ_API_KEY"] = key
+        groq_client.__init__(api_key=key)
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/discover-trends", methods=["POST"])
+@rate_limit("30/hour")
+def discover_trends():
+    """
+    Real trend discovery: Google Trends (primary) + LLM enrichment (fallback).
+    Used by ContentStudio Step 1.
+    """
+    try:
+        data     = request.get_json() or {}
+        category = data.get("category", "General")
+        context  = data.get("context", "")
+
+        # Google Trends primary
+        gt = fetch_combined_trends(category)
+        logger.info(f"discover-trends: Google Trends returned {len(gt)} for '{category}'")
+
+        if gt:
+            # Quick LLM enrichment for display context
+            topics_txt = "\n".join(f"- {t['topic']}" for t in gt[:5])
+            enrich_prompt = f"""Briefly explain (1 sentence each) why these trending topics matter for a {category} creator{' working with ' + context if context else ''}:
+{topics_txt}
+Return ONLY JSON: {{"enriched": [{{"topic": "<topic>", "why_trending": "<1 sentence>"}}]}}"""
+            try:
+                er = groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": enrich_prompt}],
+                    temperature=0.4,
+                    max_tokens=400,
+                )
+                emap = {
+                    e['topic'].lower(): e.get('why_trending', '')
+                    for e in _parse_groq_json(er.choices[0].message.content.strip()).get('enriched', [])
+                }
+            except Exception:
+                emap = {}
+
+            trends = []
+            for t in gt:
+                trends.append({
+                    **t,
+                    'why_trending': emap.get(t['topic'].lower(), t['why_trending']),
+                })
+            return jsonify({"trends": trends, "source": "Google Trends", "data_backed": True}), 200
+
+        # LLM fallback
+        prompt = f"""Identify 5 currently trending topics for {category} creators in India{' (brand context: ' + context + ')' if context else ''}.
+Return ONLY JSON:
+{{"trends": [{{"topic": "<name>", "trend_score": <0-100>, "growth_velocity": <0-100>,
+  "audience_fit": <0-100>, "why_trending": "<1 sentence>", "source": "<platform>", "data_backed": false}}]}}"""
+        resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=700,
+        )
+        result = _parse_groq_json(resp.choices[0].message.content.strip())
+        trends = sorted(result.get("trends", []), key=lambda x: x.get("trend_score", 0), reverse=True)
+        return jsonify({"trends": trends, "source": "LLM", "data_backed": False}), 200
+
+    except Exception as e:
+        logger.error(f"discover-trends failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/generate-script", methods=["POST"])
+@rate_limit("30/hour")
+def generate_script():
+    """Generate a structured reel script with virality prediction."""
+    try:
+        data     = request.get_json() or {}
+        topic    = data.get("topic", "").strip()
+        category = data.get("content_category", data.get("category", "Lifestyle"))
+        context  = data.get("context", "")
+        duration = int(data.get("duration", 45))
+
+        if not topic:
+            return jsonify({"error": "topic is required"}), 400
+
+        insights   = viral_predictor.get_content_insights(category)
+        best_hours = insights.get('best_hours', [18, 12])
+        opt_h      = insights.get('optimal_hashtag_range', (6, 15))
+
+        prompt = f"""You are a viral short-form video scriptwriter specialising in Instagram Reels.
+Write a {duration}-second reel script for: "{topic}"
+Category: {category}{'. Brand context: ' + context if context else ''}
+Data insight: optimal hashtags {opt_h[0]}-{opt_h[1]}, best posting time {best_hours[0]}:00
+
+Return ONLY valid JSON:
+{{
+  "hook": "<punchy opening line  -  first 3 seconds, max 15 words>",
+  "story": "<main content {duration - 10} seconds  -  clear, engaging narration>",
+  "cta": "<call-to-action for last 5 seconds>",
+  "key_insights": ["<insight 1>", "<insight 2>", "<insight 3>"],
+  "visual_directions": ["<shot 1>", "<shot 2>", "<shot 3>"],
+  "estimated_duration": {duration}
+}}"""
+
+        resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=800,
+        )
+        script = _parse_groq_json(resp.choices[0].message.content.strip())
+        if not script:
+            return jsonify({"error": "Failed to generate script"}), 500
+
+        # Predict virality for this script
+        has_cta = int(any(
+            w in (script.get('hook', '') + script.get('cta', '')).lower()
+            for w in ['click', 'comment', 'share', 'follow', 'save', 'dm', 'link', 'watch']
+        ))
+        viral_res = viral_predictor.predict({
+            'content_category': category,
+            'hashtags_count':   (opt_h[0] + opt_h[1]) // 2,
+            'has_call_to_action': has_cta,
+            'post_hour':        best_hours[0],
+            'day_of_week':      insights.get('best_days', ['Wednesday'])[0],
+            'media_type':       'reel',
+        })
+
+        bucket_label = {
+            'viral': 'Viral Potential', 'high': 'High Potential',
+            'medium': 'Moderate Potential', 'low': 'Needs Work'
+        }.get(viral_res['predicted_bucket'], 'Moderate Potential')
+
+        script['virality'] = {
+            'score':   viral_res['viral_score'],
+            'label':   bucket_label,
+            'signals': [
+                {'label': 'Hook Strength',  'score': min(20, 8 + has_cta * 4), 'max': 20},
+                {'label': 'Timing',         'score': 10 if has_cta else 7,      'max': 10},
+                {'label': 'Format (Reel)',  'score': 10,                         'max': 10},
+                {'label': 'Category Fit',   'score': min(15, viral_res['viral_score'] // 7), 'max': 15},
+            ],
+        }
+        script['classifier_used'] = viral_res.get('classifier_used', False)
+        return jsonify(script), 200
+
+    except Exception as e:
+        logger.error(f"generate-script failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/influencer-profile", methods=["POST"])
+def influencer_profile():
+    """
+    Score a self-reported creator profile across 6 signals.
+    Used by the Influencer Portal page.
+    """
+    try:
+        data = request.get_json() or {}
+        followers     = max(1, int(data.get("followers", 10000)))
+        er            = float(data.get("engagement_rate", 3.0))
+        niche         = str(data.get("niche", "lifestyle")).lower()
+        handle        = str(data.get("handle", "@creator")).strip()
+        posts         = int(data.get("posts", 0)) or int(followers / 50)
+        avg_likes     = float(data.get("avg_likes", 0)) or followers * (er / 100) * 0.9
+        avg_comments  = float(data.get("avg_comments", 0)) or followers * (er / 100) * 0.1
+        avg_shares    = float(data.get("avg_shares", 0)) or max(1.0, avg_comments * 0.5)
+
+        # Individual signal scores
+        eng_quality  = clamp(er * 8.0)
+        growth_score = clamp(math.log10(max(followers, 10)) * 12 + er * 3)
+
+        # Authenticity proxy (no fake_account flag for self-reported)
+        fo           = min(3.0, followers / max(1, followers * 1.2))  # approx F/F ratio
+        auth_score   = clamp(70 + (er - 2) * 5 - max(0, fo - 1) * 10)
+
+        # Brand match per niche
+        all_cats = sorted(
+            [{'category': k.title(), 'match': int(clamp(
+                (90 if k == niche else 60 if k in niche or niche in k else 30)
+                + er * 2
+            ))} for k in _NICHE_EXPANSION.keys()],
+            key=lambda x: x['match'], reverse=True
+        )
+
+        # Consistency proxy
+        consistency  = clamp(min(100, posts / 5 * 10 + 30))
+        share_rate   = clamp((avg_shares / max(1, avg_likes)) * 100 * 5)
+
+        # Ratefluencer composite
+        rf_score = int(clamp(
+            eng_quality * 0.25 + growth_score * 0.25 + auth_score * 0.20
+            + all_cats[0]['match'] * 0.20 + consistency * 0.05 + share_rate * 0.05
+        ))
+
+        tier = (
+            'Elite'       if rf_score >= 85 else
+            'Premium'     if rf_score >= 70 else
+            'Established' if rf_score >= 55 else
+            'Growing'     if rf_score >= 40 else
+            'Emerging'
+        )
+
+        improvement_tips = []
+        if er < 2.0:
+            improvement_tips.append({"signal": "Engagement", "msg": "Engagement rate below 2%  -  focus on call-to-action hooks and interactive stories."})
+        if posts < 30:
+            improvement_tips.append({"signal": "Consistency", "msg": f"Only {posts} posts detected  -  brands prefer 60+ posts showing content history."})
+        if avg_shares < avg_comments * 0.3:
+            improvement_tips.append({"signal": "Share Rate", "msg": "Share rate is low  -  add more save-worthy or shareable content formats."})
+        if followers < 10_000:
+            improvement_tips.append({"signal": "Reach", "msg": "Below 10K followers. Consider niche micro-communities before pitching large brands."})
+        if not improvement_tips:
+            improvement_tips.append({"signal": "All Clear", "msg": "Strong profile across all signals. You're ready for premium brand partnerships."})
+
+        return jsonify({
+            "ratefluencer_score": rf_score,
+            "tier":               tier,
+            "handle":             handle,
+            "niche":              niche,
+            "scores": {
+                "brand_match":  all_cats[0]['match'],
+                "authenticity": int(auth_score),
+                "growth":       int(growth_score),
+                "engagement":   int(eng_quality),
+                "consistency":  int(consistency),
+                "share_rate":   int(share_rate),
+            },
+            "top_categories":   all_cats[:3],
+            "all_categories":   all_cats,
+            "improvement_tips": improvement_tips,
+            "demographics":     get_audience_demographics(niche),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"influencer-profile failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/roi-estimate", methods=["POST"])
+def roi_estimate():
+    """
+    Estimate influencer campaign ROI based on tier, niche, engagement, and budget.
+    Returns CPM, CPP, expected reach, and ROI projection.
+    """
+    try:
+        data          = request.get_json() or {}
+        followers     = max(1, int(data.get("followers", 50000)))
+        er            = float(data.get("engagement_rate", 3.0))
+        niche         = str(data.get("niche", "lifestyle")).lower()
+        budget        = float(data.get("budget", 500_000))
+        campaign_goal = str(data.get("campaign_goal", "awareness")).lower()
+
+        tier_key  = _get_tier_key(followers)
+        tier_info = _TIER_RATES[tier_key]
+        niche_mul = _NICHE_CPM_MULTIPLIER.get(niche, 1.0)
+
+        cpp_min  = int(tier_info['cpp'][0] * niche_mul)
+        cpp_max  = int(tier_info['cpp'][1] * niche_mul)
+        cpp_rec  = int((cpp_min + cpp_max) / 2)
+
+        cpm_min  = int(tier_info['cpm'][0] * niche_mul)
+        cpm_max  = int(tier_info['cpm'][1] * niche_mul)
+        cpm_rec  = int((cpm_min + cpm_max) / 2)
+
+        # Expected performance metrics
+        base_reach       = int(followers * (er / 100) * 8)
+        expected_engages = int(followers * (er / 100))
+        posts_affordable = max(1, int(budget / cpp_rec))
+        total_reach      = base_reach * posts_affordable
+
+        # Simple ROI proxy: engagement value (\u20b95 per engagement) / budget
+        eng_value        = expected_engages * posts_affordable * 5
+        roi_ratio        = round(eng_value / max(budget, 1), 2)
+
+        # Conversion estimate by goal
+        if 'conversion' in campaign_goal or 'sales' in campaign_goal:
+            conv_rate  = 0.02
+            conv_value = int(total_reach * conv_rate)
+        elif 'awareness' in campaign_goal:
+            conv_rate  = None
+            conv_value = None
+        else:
+            conv_rate  = 0.015
+            conv_value = int(total_reach * conv_rate) if total_reach else None
+
+        def fmt_inr(n):
+            if n >= 100_000: return f"\u20b9{n/100_000:.1f}L"
+            if n >= 1_000:   return f"\u20b9{n/1_000:.0f}K"
+            return f"\u20b9{n:,}"
+
+        return jsonify({
+            "tier":             tier_info['label'],
+            "tier_key":         tier_key,
+            "niche_multiplier": niche_mul,
+            "cpp": {
+                "min":         cpp_min, "max":         cpp_max,
+                "recommended": cpp_rec,
+                "min_fmt":     fmt_inr(cpp_min), "max_fmt": fmt_inr(cpp_max),
+                "rec_fmt":     fmt_inr(cpp_rec),
+            },
+            "cpm": {
+                "min": cpm_min, "max": cpm_max, "recommended": cpm_rec,
+            },
+            "expected_reach":       base_reach,
+            "expected_engagements": expected_engages,
+            "posts_with_budget":    posts_affordable,
+            "total_campaign_reach": total_reach,
+            "total_engagements":    expected_engages * posts_affordable,
+            "engagement_value_inr": eng_value,
+            "roi_ratio":            roi_ratio,
+            "estimated_conversions": conv_value,
+            "budget_fmt":           fmt_inr(int(budget)),
+            "recommendation": (
+                f"For a {campaign_goal} campaign, allocate {fmt_inr(cpp_rec)} per post across "
+                f"{posts_affordable} creator(s) in the {niche} niche. "
+                f"Expected total reach: {base_reach * posts_affordable:,} users at ~{fmt_inr(cpm_rec)} CPM."
+            ),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"roi-estimate failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/explain", methods=["POST"])
+def explain_creator():
+    """
+    Return SHAP feature contributions for a creator's authenticity and growth scores.
+    Requires shap to be installed: pip install shap
+    """
+    if not _SHAP_AVAILABLE:
+        return jsonify({"error": "shap library not installed on server"}), 503
+
+    try:
+        data       = request.get_json() or {}
+        creator_id = int(data.get("creator_id", -1))
+
+        if creator_id < 0:
+            return jsonify({"error": "creator_id is required"}), 400
+
+        matches = engine.creators_df[engine.creators_df['creator_id'] == creator_id]
+        if matches.empty:
+            return jsonify({"error": "Creator not found"}), 404
+
+        row = matches.iloc[0].to_dict()
+
+        # -- Authenticity SHAP -------------------------------------------------
+        auth_feats = prepare_authenticity_features(row)
+        auth_df    = pd.DataFrame([auth_feats])[engine.authenticity_detector.features]
+        auth_model = engine.authenticity_detector.model
+
+        auth_explainer = _shap.TreeExplainer(auth_model)
+        auth_sv        = auth_explainer.shap_values(auth_df)
+        # For binary XGBoost, shap_values is 2D (n_samples, n_features)
+        if isinstance(auth_sv, list):
+            auth_sv = auth_sv[1]  # class 1 (Authentic)
+        auth_contribs = sorted(
+            zip(engine.authenticity_detector.features, auth_sv[0].tolist()),
+            key=lambda x: abs(x[1]), reverse=True
+        )[:5]
+
+        # -- Growth SHAP -------------------------------------------------------
+        growth_feats_dict = prepare_growth_features(row)
+        growth_df         = pd.DataFrame([growth_feats_dict])[engine.growth_predictor.features]
+        growth_model      = engine.growth_predictor.model
+
+        growth_explainer = _shap.TreeExplainer(growth_model)
+        growth_sv        = growth_explainer.shap_values(growth_df)
+        growth_contribs  = sorted(
+            zip(engine.growth_predictor.features, growth_sv[0].tolist()),
+            key=lambda x: abs(x[1]), reverse=True
+        )[:5]
+
+        _FEATURE_LABELS = {
+            'flw': 'Followers', 'flg': 'Following', 'fo': 'Follow Ratio',
+            'pr': 'Profile Completeness', 'cs': 'Content Spam Score',
+            'hc': 'Hashtag Count', 'erl': 'ER Likes', 'erc': 'ER Comments',
+            'engagement_rate_7d': 'Engagement Rate', 'net_growth': 'Net Growth',
+            'growth_momentum': 'Growth Momentum', 'views_7d_avg': '7-Day Views Avg',
+        }
+
+        return jsonify({
+            "creator_id": creator_id,
+            "authenticity_explanation": [
+                {
+                    "feature": _FEATURE_LABELS.get(f, f),
+                    "raw_feature": f,
+                    "shap_value": round(v, 4),
+                    "direction": "positive" if v > 0 else "negative",
+                }
+                for f, v in auth_contribs
+            ],
+            "growth_explanation": [
+                {
+                    "feature": _FEATURE_LABELS.get(f, f),
+                    "raw_feature": f,
+                    "shap_value": round(v, 4),
+                    "direction": "positive" if v > 0 else "negative",
+                }
+                for f, v in growth_contribs
+            ],
+            "shap_available": True,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"explain failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 

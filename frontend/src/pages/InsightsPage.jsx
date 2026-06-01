@@ -76,7 +76,7 @@ export default function InsightsPage() {
                 Real Data Insights
               </h2>
               <p style={{ fontSize: "14px", color: "var(--text2)" }}>
-                Patterns from <strong style={{ color: "var(--accent)" }}>{data?.total_posts?.toLocaleString() || "29,999"} real Instagram posts</strong> — what actually goes viral
+                Patterns from <strong style={{ color: "var(--accent)" }}>{data?.total_posts?.toLocaleString() || "29,999"} real Instagram posts</strong>  -  what actually goes viral
               </p>
             </div>
 
@@ -165,7 +165,7 @@ export default function InsightsPage() {
                 </div>
 
                 <div style={{ background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.12)", borderRadius: "var(--radius)", padding: "1rem 1.5rem", fontSize: "13px", color: "var(--text2)", lineHeight: 1.7 }}>
-                  <strong style={{ color: "var(--accent)" }}>How this is used:</strong> Every content generated in Viral Lab is automatically optimised against these benchmarks — hashtag count, posting time, and CTA inclusion are calibrated to the best-performing patterns in your content category.
+                  <strong style={{ color: "var(--accent)" }}>How this is used:</strong> Every content generated in Viral Lab is automatically optimised against these benchmarks  -  hashtag count, posting time, and CTA inclusion are calibrated to the best-performing patterns in your content category.
                 </div>
               </>
             )}

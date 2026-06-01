@@ -1,7 +1,37 @@
-flask>=3.0
-flask-cors>=4.0
-flask-limiter>=3.5
-pandas>=2.0
-scikit-learn>=1.3
-groq>=0.9
-python-dotenv>=1.0
+# Ratefluencer AI Backend -- Python 3.10+
+# Install: pip install -r requirements.txt
+
+# Web framework
+Flask==3.1.3
+flask-cors==6.0.2
+Flask-Limiter==4.1.1
+python-dotenv==1.2.2
+
+# Data / ML core
+numpy==2.4.6
+pandas==3.0.3
+scipy==1.17.1
+scikit-learn==1.8.0
+joblib==1.5.3
+xgboost==3.2.0
+
+# Semantic brand matching (ChromaDB vector store + embeddings)
+chromadb==1.5.9
+sentence-transformers==5.5.1
+torch==2.12.0
+transformers==5.9.0
+huggingface_hub==1.17.0
+
+# Explainability
+shap==0.51.0
+
+# Real-time trend discovery
+pytrends==4.9.2
+requests==2.34.2
+
+# LLM
+groq==1.4.0
+
+# Utilities
+tqdm==4.67.3
+

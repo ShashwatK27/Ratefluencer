@@ -1,6 +1,6 @@
 import React from 'react';
 
-const COL = 'minmax(180px,2fr) 90px 90px 95px 80px 120px 64px';
+const COL = 'minmax(180px,2fr) 90px 90px 75px 95px 80px 120px 64px';
 
 function scoreClass(s) {
   return s >= 85 ? 'score-s' : s >= 75 ? 'score-a' : s >= 65 ? 'score-b' : 'score-c';
@@ -10,7 +10,7 @@ function tierColor(t) {
 }
 
 function TableHeader() {
-  const cols = ['Influencer', 'Followers', 'Eng. Rate', 'Auth Score', 'Growth', 'Ratefluencer™', 'Tier'];
+  const cols = ['Influencer', 'Followers', 'Eng. Rate', 'Saves', 'Auth Score', 'Growth', 'Ratefluencer™', 'Tier'];
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: COL,
@@ -25,7 +25,7 @@ function TableHeader() {
 }
 
 function TableRow({ influencer, onClick }) {
-  const { name, handle, followers, er, auth, growth, score, tier, av, c1, c2 } = influencer;
+  const { name, handle, followers, er, auth, growth, score, tier, av, c1, c2, saves_str } = influencer;
 
   return (
     <div
@@ -70,6 +70,10 @@ function TableRow({ influencer, onClick }) {
 
       <div style={{ fontSize: '13px', color: 'var(--text2)' }}>{followers}</div>
       <div style={{ fontSize: '13px', color: 'var(--text)' }}>{er}</div>
+      <div style={{ fontSize: '12px', color: 'var(--purple)', fontFamily: 'var(--font-mono)' }}>
+        {saves_str || ' - '}
+        <span style={{ fontSize: '9px', color: 'var(--text3)', display: 'block', marginTop: '1px' }}>saves</span>
+      </div>
 
       <div>
         <span className={`score-pill ${scoreClass(auth)}`}>{auth}</span>
@@ -99,7 +103,7 @@ export default function InfluencerTable({ data, onCreatorClick }) {
   return (
     <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflowX: 'auto' }}>
       <div style={{ padding: '8px 16px 6px', fontSize: '11px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--border)' }}>
-        Click any creator to see their virality score →
+        Click any creator to see their virality score ->
       </div>
       <TableHeader />
       {data.map(inf => (

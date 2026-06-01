@@ -75,7 +75,7 @@ export default function RealCreatorsPage() {
                 Real World Creators
               </h2>
               <p style={{ fontSize: "14px", color: "var(--text2)" }}>
-                Top influencers from real platform data — Instagram Top 100 & TikTok 1000
+                Top influencers from real platform data  -  Instagram Top 100 & TikTok 1000
               </p>
             </div>
 

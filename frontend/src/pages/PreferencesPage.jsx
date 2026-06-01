@@ -59,7 +59,7 @@ export default function PreferencesPage() {
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "13px" }}>Minimum Authenticity Score (0–100)</label>
+                    <label style={{ fontSize: "13px" }}>Minimum Authenticity Score (0-100)</label>
                     <input
                       type="number"
                       min="0"

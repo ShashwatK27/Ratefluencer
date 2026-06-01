@@ -125,7 +125,7 @@ export default function AIAgent() {
           </button>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>Autonomous AI Agent</h2>
           <p style={{ fontSize: "15px", color: "var(--text2)" }}>
-            Discovers trends → selects best influencer → generates Instagram + LinkedIn content → predicts success.
+            Discovers trends -> selects best influencer -> generates Instagram + LinkedIn content -> predicts success.
           </p>
         </div>
 
@@ -137,7 +137,7 @@ export default function AIAgent() {
             <label>Describe what you want to achieve</label>
             <input
               type="text"
-              placeholder="e.g. Launch a skincare product for urban women aged 25–34 in India"
+              placeholder="e.g. Launch a skincare product for urban women aged 25-34 in India"
               value={goal}
               onChange={e => setGoal(e.target.value)}
               onKeyDown={e => e.key === "Enter" && runAgent()}
@@ -173,7 +173,7 @@ export default function AIAgent() {
             {result.content_attempts && result.content_attempts.length > 0 && (
               <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "16px" }}>
                 <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>
-                  🧠 Agent Reasoning — {result.content_attempts.length} iteration{result.content_attempts.length > 1 ? "s" : ""}
+                  🧠 Agent Reasoning  -  {result.content_attempts.length} iteration{result.content_attempts.length > 1 ? "s" : ""}
                   {result.agent_refined && <span style={{ marginLeft: "8px", color: "var(--accent)" }}>✓ Content refined</span>}
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
@@ -202,7 +202,7 @@ export default function AIAgent() {
                 </div>
                 {result.creator_pool && result.creator_pool.length > 0 && (
                   <div style={{ fontSize: "12px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
-                    Evaluated creators: {result.creator_pool.map(c => `${c.name} (RF=${c.rf_score})`).join(" · ")}
+                    Evaluated creators: {result.creator_pool.map(c => `${c.name} (RF=${c.rf_score})`).join(" . ")}
                   </div>
                 )}
               </div>

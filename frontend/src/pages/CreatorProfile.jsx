@@ -89,14 +89,14 @@ export default function CreatorProfile() {
   const tips = [
     erVal >= avgER
       ? `✓ Your ${erVal.toFixed(1)}% engagement rate beats the ${creator.cat} average of ${avgER}%`
-      : `↑ Your engagement (${erVal.toFixed(1)}%) is below the ${creator.cat} average (${avgER}%). Post more consistently.`,
+      : `^ Your engagement (${erVal.toFixed(1)}%) is below the ${creator.cat} average (${avgER}%). Post more consistently.`,
     authScore >= 85
-      ? "✓ Authenticity score is strong — your audience is organic and genuine"
-      : "↑ Improve authenticity: reduce hashtag stuffing and avoid engagement pods",
+      ? "✓ Authenticity score is strong  -  your audience is organic and genuine"
+      : "^ Improve authenticity: reduce hashtag stuffing and avoid engagement pods",
     growthScore >= 80
-      ? "✓ Strong growth trajectory — your follower momentum is positive"
-      : "↑ Post during peak hours to accelerate growth",
-    `↑ Best time to post: ${bestHours[0]} on ${bestDays[0]} for maximum ${creator.cat} reach`,
+      ? "✓ Strong growth trajectory  -  your follower momentum is positive"
+      : "^ Post during peak hours to accelerate growth",
+    `^ Best time to post: ${bestHours[0]} on ${bestDays[0]} for maximum ${creator.cat} reach`,
   ];
 
   return (
@@ -138,7 +138,7 @@ export default function CreatorProfile() {
               )}
             </div>
             <div style={{ fontSize: "14px", color: "var(--text3)", marginBottom: "8px" }}>
-              {creator.handle} · {creator.cat} · {creator.followers} followers
+              {creator.handle} . {creator.cat} . {creator.followers} followers
             </div>
             <div style={{ display: "flex", gap: "16px" }}>
               <span style={{ fontSize: "13px", color: "var(--accent)" }}>{creator.er} Engagement Rate</span>
@@ -234,6 +234,58 @@ export default function CreatorProfile() {
           </div>
         </div>
 
+        {/* Audience Demographics */}
+        {creator.demographics && (
+          <div className="fade-up delay-3" style={{
+            background: "var(--bg2)", border: "1px solid var(--border)",
+            borderRadius: "var(--radius)", padding: "1.5rem", marginBottom: "1.5rem",
+          }}>
+            <div className="section-label" style={{ marginBottom: "16px" }}>Audience Demographics</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+
+              {/* Age groups */}
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>Age Groups</div>
+                {creator.demographics.age_groups.map(ag => (
+                  <div key={ag.label} style={{ marginBottom: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text2)" }}>{ag.label}</span>
+                      <span style={{ fontSize: "12px", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{ag.pct}%</span>
+                    </div>
+                    <div style={{ height: "4px", background: "var(--bg3)", borderRadius: "2px", overflow: "hidden" }}>
+                      <div style={{ height: "4px", background: "var(--accent)", width: `${ag.pct}%`, borderRadius: "2px", transition: "width .6s ease" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Gender split */}
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>Gender Split</div>
+                <div style={{ marginBottom: "10px" }}>
+                  {[
+                    { label: "Female", pct: creator.demographics.gender.female, color: "var(--coral)" },
+                    { label: "Male",   pct: creator.demographics.gender.male,   color: "var(--blue)" },
+                  ].map(g => (
+                    <div key={g.label} style={{ marginBottom: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                        <span style={{ fontSize: "12px", color: "var(--text2)" }}>{g.label}</span>
+                        <span style={{ fontSize: "12px", color: g.color, fontFamily: "var(--font-mono)" }}>{g.pct}%</span>
+                      </div>
+                      <div style={{ height: "4px", background: "var(--bg3)", borderRadius: "2px", overflow: "hidden" }}>
+                        <div style={{ height: "4px", background: g.color, width: `${g.pct}%`, borderRadius: "2px", transition: "width .6s ease" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", fontSize: "12px", color: "var(--text2)", lineHeight: 1.6 }}>
+                  <strong style={{ color: "var(--text)" }}>Primary audience:</strong> {creator.demographics.primary_age} . {creator.demographics.primary_gender}-dominant
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Improvement tips */}
         <div className="fade-up delay-3" style={{
           background: "var(--bg2)", border: "1px solid var(--border)",
@@ -250,7 +302,7 @@ export default function CreatorProfile() {
               }}>
                 <span style={{ fontSize: "14px", flexShrink: 0 }}>{tip.startsWith("✓") ? "✅" : "💡"}</span>
                 <span style={{ fontSize: "13px", color: tip.startsWith("✓") ? "var(--accent)" : "var(--text2)", lineHeight: 1.6 }}>
-                  {tip.replace(/^[✓↑]\s/, "")}
+                  {tip.replace(/^[✓^]\s/, "")}
                 </span>
               </div>
             ))}

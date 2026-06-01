@@ -126,7 +126,7 @@ class BrandMatcher:
     def _initialize(self):
         """Initialize embedding model and database using Cosine Similarity space."""
         try:
-            # Load embedding model — use GPU if available, otherwise CPU
+            # Load embedding model  -  use GPU if available, otherwise CPU
             try:
                 import torch
                 self._device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -234,13 +234,13 @@ class BrandMatcher:
                 doc = f"Category/Niche: {category}. Bio: {bio}. Followers: {followers:,} ({tier} creator). Engagement Rate: {er:.2%}."
                 enriched_documents.append(doc)
             
-            # Generate Embeddings — larger batch size on GPU for much faster throughput
+            # Generate Embeddings  -  larger batch size on GPU for much faster throughput
             encode_batch = 512 if getattr(self, '_device', 'cpu') == 'cuda' else 64
             logger.info(f"Encoding {len(enriched_documents)} profiles (batch={encode_batch}, device={getattr(self, '_device', 'cpu').upper()})...")
             embeddings = self.embedding_model.encode(
                 enriched_documents,
                 batch_size=encode_batch,
-                show_progress_bar=True,
+                show_progress_bar=False,
             ).tolist()
             
             # Prepare comprehensive metadatas (Chroma-compliant flat dict)
@@ -280,7 +280,7 @@ class BrandMatcher:
                     embeddings=embeddings[start:end],
                     metadatas=metadatas[start:end],
                 )
-                logger.info(f"Indexed creators {start + 1}–{end} of {total}...")
+                logger.info(f"Indexed creators {start + 1}-{end} of {total}...")
 
             logger.info(f"Successfully loaded {total} creators into Cosine RAG pipeline.")
             return total

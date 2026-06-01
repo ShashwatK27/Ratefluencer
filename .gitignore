@@ -1,5 +1,17 @@
-# Created by https://www.toptal.com/developers/gitignore/api/python
-# Edit at https://www.toptal.com/developers/gitignore?templates=python
+# ── Sensitive / secrets ───────────────────────────────────────────────────────
+api_key.txt
+*.key
+.env
+.env.local
+backend/.env
+backend/feedback_store.json
+backend/chroma_db/
+backend/top_creators_temp.csv
+
+# ── Large model artifacts (tracked separately or regenerated) ─────────────────
+backend/*.pkl
+
+# ── Created by https://www.toptal.com/developers/gitignore/api/python ─────────
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

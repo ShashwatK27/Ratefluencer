@@ -1,11 +1,15 @@
 """
-Content Optimizer — powered by real Instagram Analytics (30K posts).
+Content Optimizer  -  powered by real Instagram Analytics (30K posts).
 
-Instead of guessing virality from thin pre-publish signals, this module:
-1. Computes data-driven optimal posting parameters per category
-2. Scores a content brief against those optima
-3. Returns actionable recommendations with real-data backing
+1. Trained GradientBoosting classifier predicts the performance bucket
+   (low / medium / high / viral) and returns a weighted expected score.
+2. Per-category benchmark stats provide actionable optimisation tips.
+3. Falls back to heuristic scoring when the trained model is unavailable.
 """
+
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning,  module='sklearn')
+warnings.filterwarnings('ignore', message='.*valid feature names.*')
 
 import pandas as pd
 import numpy as np
@@ -18,17 +22,27 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR  = Path(__file__).parent.absolute()
 INSIGHTS_PKL = BACKEND_DIR / 'viral_insights_v1.pkl'
 
+# Bucket label -> numeric score for weighted expectation
+_BUCKET_SCORES = {'low': 25, 'medium': 50, 'high': 75, 'viral': 95}
+
 
 class ViralPredictor:
     def __init__(self):
-        self.insights = {}      # per-category stats from real data
-        self.global_stats = {}  # platform-wide benchmarks
+        self.insights     = {}   # per-category stats from real data
+        self.global_stats = {}   # platform-wide benchmarks
+        # Trained classifier (optional  -  loaded if pkl exists)
+        self._clf      = None
+        self._le       = None
+        self._clf_feats = None
+        self._encoders  = None
         self._load_or_compute()
+        self._load_classifier()
 
-    # ── public API ────────────────────────────────────────────────────────────
+    # -- public API ------------------------------------------------------------
     def predict(self, features: dict) -> dict:
         """
-        Score a content brief against real Instagram performance benchmarks.
+        Score a content brief.  Primary: trained GradientBoosting classifier.
+        Fallback: rule-based heuristic.  Both return optimisation tips.
 
         features keys (all optional):
             hashtags_count, caption_length, has_call_to_action,
@@ -36,77 +50,104 @@ class ViralPredictor:
         """
         try:
             category = str(features.get('content_category', 'Lifestyle'))
-            stats = self.insights.get(category, self.global_stats)
+            stats    = self.insights.get(category, self.global_stats)
 
-            score = 50  # baseline
-            reasons = []
-
-            # Hashtag scoring
-            h = int(features.get('hashtags_count', 10))
             opt_low, opt_high = stats.get('optimal_hashtag_range', (6, 15))
-            if opt_low <= h <= opt_high:
-                score += 15
-                reasons.append(f"✓ Hashtag count ({h}) is in the optimal range {opt_low}–{opt_high}")
-            elif h < opt_low:
-                score += 5
-                reasons.append(f"↑ Add {opt_low - h} more hashtags (optimal: {opt_low}–{opt_high})")
-            else:
-                score += 8
-                reasons.append(f"↓ Reduce hashtags to {opt_low}–{opt_high} (you have {h})")
+            best_hours  = stats.get('best_hours',  [12, 18, 20])
+            best_days   = stats.get('best_days',   ['Wednesday', 'Friday'])
+            best_media  = stats.get('best_media_type', 'reel')
 
-            # CTA scoring
-            cta = int(features.get('has_call_to_action', 1))
+            # -- Classifier branch ---------------------------------------------
+            clf_score  = None
+            clf_bucket = None
+            if self._clf is not None:
+                try:
+                    x = self._build_clf_input(features)
+                    proba = self._clf.predict_proba([x])[0]
+                    classes = list(self._le.classes_)
+                    # weighted expected score
+                    clf_score = sum(
+                        proba[i] * _BUCKET_SCORES.get(classes[i], 50)
+                        for i in range(len(classes))
+                    )
+                    clf_score  = int(min(99, max(10, clf_score)))
+                    clf_bucket = classes[int(np.argmax(proba))]
+                except Exception as ex:
+                    logger.debug(f"Classifier inference failed: {ex}")
+
+            # -- Heuristic (always run  -  used for optimisation tips) -----------
+            h_score   = 50
+            reasons   = []
+
+            h = int(features.get('hashtags_count', 10))
+            if opt_low <= h <= opt_high:
+                h_score += 15
+                reasons.append(f"[OK] Hashtag count ({h}) in optimal range {opt_low}-{opt_high}")
+            elif h < opt_low:
+                h_score += 5
+                reasons.append(f"^ Add {opt_low - h} more hashtags (optimal: {opt_low}-{opt_high})")
+            else:
+                h_score += 8
+                reasons.append(f"v Reduce hashtags to {opt_low}-{opt_high} (you have {h})")
+
+            cta      = int(features.get('has_call_to_action', 1))
             cta_lift = stats.get('cta_viral_rate', 0.28)
             if cta:
-                score += 12
-                reasons.append(f"✓ CTA included — viral rate {cta_lift:.0%} vs {stats.get('no_cta_viral_rate', 0.22):.0%} without")
+                h_score += 12
+                reasons.append(f"[OK] CTA included  -  viral rate {cta_lift:.0%} vs {stats.get('no_cta_viral_rate', 0.22):.0%} without")
             else:
-                reasons.append(f"↑ Add a CTA — boosts viral rate by {(cta_lift/max(stats.get('no_cta_viral_rate',0.22),0.01)-1)*100:.0f}%")
+                reasons.append(f"^ Add a CTA  -  boosts viral rate by {(cta_lift/max(stats.get('no_cta_viral_rate',0.22),0.01)-1)*100:.0f}%")
 
-            # Posting hour
             h_val = int(features.get('post_hour', 18))
-            best_hours = stats.get('best_hours', [12, 18, 20])
             if h_val in best_hours:
-                score += 10
-                reasons.append(f"✓ Posting hour ({h_val}:00) is a top-performing slot")
+                h_score += 10
+                reasons.append(f"[OK] Posting at {h_val}:00  -  a top-performing slot for {category}")
             else:
-                reasons.append(f"↑ Post at {best_hours[0]}:00 instead — {stats.get('best_hour_viral_pct', 0.3):.0%} viral rate at peak hour")
+                reasons.append(f"^ Post at {best_hours[0]}:00 instead ({stats.get('best_hour_viral_pct',0.3):.0%} viral rate)")
 
-            # Day of week
             day = str(features.get('day_of_week', 'Wednesday'))
-            best_days = stats.get('best_days', ['Wednesday', 'Friday'])
             if day in best_days:
-                score += 8
-                reasons.append(f"✓ {day} is among the best days for this category")
+                h_score += 8
+                reasons.append(f"[OK] {day} is among the best posting days for {category}")
             else:
-                reasons.append(f"↑ Try posting on {best_days[0]} — {(stats.get('best_day_viral_pct',0.3)*100):.0f}% viral rate")
+                reasons.append(f"^ Try posting on {best_days[0]} ({stats.get('best_day_viral_pct',0.3)*100:.0f}% viral rate)")
 
-            # Media type
             media = str(features.get('media_type', 'reel'))
-            best_media = stats.get('best_media_type', 'reel')
             if media.lower() == best_media.lower():
-                score += 5
-                reasons.append(f"✓ {media.title()} is the top-performing format in this category")
+                h_score += 5
+                reasons.append(f"[OK] {media.title()} is the top format in {category}")
 
-            score = min(99, max(10, score))
+            h_score = int(min(99, max(10, h_score)))
 
-            bucket = (
-                'viral'  if score >= 80 else
-                'high'   if score >= 65 else
-                'medium' if score >= 50 else
-                'low'
-            )
+            # -- Blend: classifier (70%) + heuristic (30%) when clf available --
+            if clf_score is not None:
+                final_score  = int(round(clf_score * 0.70 + h_score * 0.30))
+                final_bucket = clf_bucket
+                model_label  = (
+                    f'GradientBoosting classifier trained on '
+                    f'{self.global_stats.get("total_posts",30000):,} real Instagram posts'
+                )
+            else:
+                final_score  = h_score
+                final_bucket = (
+                    'viral'  if h_score >= 80 else
+                    'high'   if h_score >= 65 else
+                    'medium' if h_score >= 50 else
+                    'low'
+                )
+                model_label = f'Heuristic benchmarked on {self.global_stats.get("total_posts",30000):,} posts'
 
             return {
-                'viral_score': score,
-                'predicted_bucket': bucket,
-                'optimization_tips': reasons,
-                'best_hours': best_hours[:3],
-                'best_days': best_days[:3],
-                'optimal_hashtag_range': f"{opt_low}–{opt_high}",
-                'best_media_type': best_media,
-                'data_points': stats.get('total_posts', 0),
-                'model': f'Optimiser trained on {self.global_stats.get("total_posts",30000):,} real Instagram posts',
+                'viral_score':           final_score,
+                'predicted_bucket':      final_bucket,
+                'optimization_tips':     reasons,
+                'best_hours':            best_hours[:3],
+                'best_days':             best_days[:3],
+                'optimal_hashtag_range': f"{opt_low}-{opt_high}",
+                'best_media_type':       best_media,
+                'data_points':           stats.get('total_posts', 0),
+                'model':                 model_label,
+                'classifier_used':       clf_score is not None,
             }
         except Exception as e:
             logger.error(f"Virality scoring failed: {e}")
@@ -131,7 +172,62 @@ class ViralPredictor:
             'avg_viral_hashtags': self.global_stats.get('optimal_hashtag_range', (6, 15)),
         }
 
-    # ── internal ──────────────────────────────────────────────────────────────
+    # -- classifier helpers ----------------------------------------------------
+    def _load_classifier(self):
+        clf_pkl  = BACKEND_DIR / 'viral_clf_v1.pkl'
+        le_pkl   = BACKEND_DIR / 'viral_label_encoder_v1.pkl'
+        feat_pkl = BACKEND_DIR / 'viral_features_v1.pkl'
+        enc_pkl  = BACKEND_DIR / 'viral_encoders_v1.pkl'
+        if not all(p.exists() for p in [clf_pkl, le_pkl, feat_pkl, enc_pkl]):
+            logger.info("Viral classifier not found  -  run train_viral_model.py to enable ML scoring")
+            return
+        try:
+            self._clf       = joblib.load(clf_pkl)
+            self._le        = joblib.load(le_pkl)
+            self._clf_feats = joblib.load(feat_pkl)
+            self._encoders  = joblib.load(enc_pkl)
+            logger.info(f"Viral classifier loaded ({len(self._clf_feats)} features, {len(self._le.classes_)} classes)")
+        except Exception as e:
+            logger.warning(f"Failed to load viral classifier: {e}")
+
+    def _build_clf_input(self, features: dict) -> list:
+        import math as _math
+        row = []
+        follower_count = float(features.get('follower_count', 50000) or 50000)
+        er             = float(features.get('engagement_rate', 3.0) or 3.0)
+
+        for feat in self._clf_feats:
+            # -- Old IG-Analytics feature names --------------------------------
+            if feat == 'media_type_enc':
+                enc = self._encoders.get('media_type')
+                v = float(enc.transform([[str(features.get('media_type', 'reel'))]])[0][0]) if enc else 0.0
+            elif feat == 'day_of_week_enc':
+                enc = self._encoders.get('day_of_week')
+                v = float(enc.transform([[str(features.get('day_of_week', 'Wednesday'))]])[0][0]) if enc else 0.0
+            elif feat in ('category_enc', 'content_category_enc'):
+                enc = self._encoders.get('content_category')
+                v = float(enc.transform([[str(features.get('content_category', 'Lifestyle'))]])[0][0]) if enc else 0.0
+            # -- New 33K-dataset feature names --------------------------------
+            elif feat == 'niche_enc':
+                enc = self._encoders.get('niche')
+                niche = str(features.get('content_category', features.get('niche', 'Lifestyle'))).lower()
+                v = float(enc.transform([[niche]])[0][0]) if enc else 0.0
+            elif feat == 'log_followers':
+                v = float(_math.log1p(follower_count))
+            elif feat == 'share_rate':
+                shares = float(features.get('shares', max(1.0, follower_count * er / 100 * 0.1)))
+                v = shares / max(follower_count, 1)
+            elif feat == 'growth_score':
+                v = float(features.get('growth_score', 65.0))
+            elif feat == 'authenticity_score':
+                v = float(features.get('authenticity_score', 75.0))
+            # -- Direct passthrough -------------------------------------------
+            else:
+                v = float(features.get(feat, 0) or 0)
+            row.append(v)
+        return row
+
+    # -- internal --------------------------------------------------------------
     def _load_or_compute(self):
         if INSIGHTS_PKL.exists():
             try:

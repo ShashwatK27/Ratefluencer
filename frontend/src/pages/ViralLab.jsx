@@ -27,19 +27,35 @@ const LI_FIELDS = [
   { key: "engagement_hook",  icon: "💬", label: "Engagement Question" },
 ];
 
-function FeedbackBar({ contentKey, result }) {
+function FeedbackBar({ contentKey, result, category }) {
   const storageKey = `feedback_${contentKey}_${JSON.stringify(result).slice(0,30)}`;
   const [vote, setVote] = useState(() => localStorage.getItem(storageKey) || null);
 
-  const handleVote = (v) => {
+  const handleVote = async (v) => {
     setVote(v);
+    // 1. Persist locally
     localStorage.setItem(storageKey, v);
     const history = JSON.parse(localStorage.getItem('ratefluencer_feedback') || '[]');
-    history.push({
+    const entry = {
       key: contentKey, vote: v, ts: Date.now(), virality: result?.virality_score,
       content: { hook: result?.hook, caption: result?.caption, hashtags: result?.hashtags },
-    });
+    };
+    history.push(entry);
     localStorage.setItem('ratefluencer_feedback', JSON.stringify(history.slice(-50)));
+    // 2. Persist server-side for continuous learning
+    try {
+      await fetch(config.api.endpoints.feedback, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key:      contentKey,
+          vote:     v,
+          virality: result?.virality_score,
+          category: category || '',
+          content:  { hook: result?.hook, caption: result?.caption, hashtags: result?.hashtags },
+        }),
+      });
+    } catch (_) { /* non-blocking */ }
   };
 
   return (
@@ -63,7 +79,7 @@ function FeedbackBar({ contentKey, result }) {
           {icon} {label}
         </button>
       ))}
-      {vote && <span style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>✓ Feedback saved — improving future results</span>}
+      {vote && <span style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>✓ Feedback saved  -  improving future results</span>}
     </div>
   );
 }
@@ -202,7 +218,7 @@ export default function ViralLab() {
           </button>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "36px", marginBottom: "8px" }}>Viral Content Lab</h2>
           <p style={{ fontSize: "15px", color: "var(--text2)" }}>
-            Generate platform-optimised content for Instagram Reels or LinkedIn — backed by real data.
+            Generate platform-optimised content for Instagram Reels or LinkedIn  -  backed by real data.
           </p>
         </div>
 
@@ -210,7 +226,7 @@ export default function ViralLab() {
         {platform === "linkedin" && linkedinFeedbackCount > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "rgba(104,184,240,0.06)", border: "1px solid rgba(104,184,240,0.2)", borderRadius: "var(--radius-sm)", marginBottom: "12px", fontSize: "12px", color: "var(--blue)" }}>
             <span>🧠</span>
-            <span>AI is learning from your {linkedinFeedbackCount} previous LinkedIn feedback{linkedinFeedbackCount > 1 ? 's' : ''} — content improves with each generation</span>
+            <span>AI is learning from your {linkedinFeedbackCount} previous LinkedIn feedback{linkedinFeedbackCount > 1 ? 's' : ''}  -  content improves with each generation</span>
           </div>
         )}
 
@@ -235,7 +251,7 @@ export default function ViralLab() {
           ))}
         </div>
 
-        {/* ── Score My Caption tab ── */}
+        {/* -- Score My Caption tab -- */}
         {platform === "score" && (
           <div>
             {/* Input */}
@@ -361,10 +377,10 @@ export default function ViralLab() {
                   {/* Improvements */}
                   {scoreResult.improvements?.length > 0 && (
                     <div style={{ background: "rgba(240,120,104,0.04)", border: "1px solid rgba(240,120,104,0.15)", borderRadius: "var(--radius)", padding: "1.25rem" }}>
-                      <div style={{ fontSize: "11px", color: "var(--coral)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>↑ Improvements</div>
+                      <div style={{ fontSize: "11px", color: "var(--coral)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px" }}>^ Improvements</div>
                       {scoreResult.improvements.map((s, i) => (
                         <div key={i} style={{ fontSize: "13px", color: "var(--text2)", marginBottom: "6px", display: "flex", gap: "8px" }}>
-                          <span style={{ color: "var(--coral)", flexShrink: 0 }}>↑</span>{s}
+                          <span style={{ color: "var(--coral)", flexShrink: 0 }}>^</span>{s}
                         </div>
                       ))}
                     </div>
@@ -395,7 +411,7 @@ export default function ViralLab() {
           </div>
         )}
 
-        {/* Input card — only for Instagram / LinkedIn */}
+        {/* Input card  -  only for Instagram / LinkedIn */}
         {platform !== "score" && <><div style={{ background: "var(--bg2)", border: `1px solid ${platform === "linkedin" ? "rgba(104,184,240,0.3)" : IG_BORDER}`, borderRadius: "var(--radius)", padding: "2rem", marginBottom: "1.5rem", boxShadow: platform === "linkedin" ? "0 0 0 1px rgba(104,184,240,0.08)" : `0 0 0 1px ${IG_COLOR_DIM}` }}>
           <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text2)", letterSpacing: ".05em", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "1.5rem" }}>
             {platform === "linkedin" ? "💼 LinkedIn Topic" : "🧪 Content Topic"}
@@ -452,7 +468,7 @@ export default function ViralLab() {
               {[
                 { label: platform === "linkedin" ? "Professional Score" : "Virality Score", value: result.virality_score, color: platform === "linkedin" ? "var(--blue)" : "var(--accent)", icon: platform === "linkedin" ? "💼" : "🚀" },
                 { label: "Trend Score",    value: result.trend_score,    color: "var(--gold)", icon: "🔥" },
-                { label: "Best Post Time", value: result.best_post_time || (platform === "linkedin" ? "Tue–Thu 9:00 AM" : "18:00 Wed"), color: "var(--coral)", icon: "⏰" },
+                { label: "Best Post Time", value: result.best_post_time || (platform === "linkedin" ? "Tue-Thu 9:00 AM" : "18:00 Wed"), color: "var(--coral)", icon: "⏰" },
               ].map(item => item.value != null && (
                 <div key={item.label} style={{ background: platform === "linkedin" ? "rgba(104,184,240,0.04)" : IG_COLOR_DIM.replace("0.12","0.05"), border: platform === "linkedin" ? "1px solid rgba(104,184,240,0.2)" : `1px solid ${IG_BORDER}`, borderRadius: "var(--radius)", padding: "1rem 1.25rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
