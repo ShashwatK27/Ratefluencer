@@ -924,26 +924,54 @@ def match_creators():
         for match in top_matches:
             creator_id = int(match['creator_id'])
 
-            score_res = engine.score_creator(
-                creator_id=creator_id,
-                campaign_text=campaign_text,
-                campaign_goal=campaign_goal
-            )
+            # CsvEngine uses generated_scores(); RatefluencerEngine uses score_creator()
+            try:
+                score_res = engine.score_creator(
+                    creator_id=creator_id,
+                    campaign_text=campaign_text,
+                    campaign_goal=campaign_goal
+                )
+                final_score  = int(score_res['ratefluencer_score'])
+                virality     = int(score_res['scores']['growth_score'])
+                brand_match  = int(score_res['scores']['brand_match_score'])
+                authenticity = int(score_res['scores']['authenticity_score'])
+                er_raw       = score_res['engagement_rate']
+                niche        = score_res['niche']
+                followers_val= score_res['followers']
+                risk_level   = score_res['risk_metrics']['risk_level']
+                is_fake_flag = score_res['risk_metrics']['is_fake']
+            except (RuntimeError, AttributeError):
+                # CsvEngine path: score via generated_scores() on the row
+                rows = engine.creators_df[engine.creators_df['creator_id'] == creator_id]
+                if rows.empty:
+                    continue
+                row_dict = rows.iloc[0].to_dict()
+                scores = generated_scores(row_dict, campaign_text, category_filters, campaign_goal)
+                final_score   = int(scores['ratefluencer'])
+                virality      = int(scores['growth'])
+                brand_match   = int(scores['brand_match'])
+                authenticity  = int(scores['authenticity'])
+                er_raw        = float(row_dict.get('engagement_rate', 3.0))
+                niche         = str(row_dict.get('niche', ''))
+                followers_val = int(row_dict.get('followers', 0))
+                risk_level    = scores['risk_level']
+                is_fake_flag  = scores['is_fake']
+                score_res = {
+                    'ratefluencer_score': final_score,
+                    'scores': {'growth_score': virality, 'brand_match_score': brand_match,
+                               'authenticity_score': authenticity},
+                    'engagement_rate': er_raw, 'niche': niche, 'followers': followers_val,
+                    'risk_metrics': {'risk_level': risk_level, 'is_fake': is_fake_flag},
+                    'success_probability': scores['success_probability'],
+                    'model_confidence': scores['model_confidence'],
+                }
             all_score_results.append(score_res)
 
-            if score_res['risk_metrics']['risk_level'] == 'High' or score_res['risk_metrics']['is_fake']:
+            if risk_level == 'High' or is_fake_flag:
                 logger.info(f"Excluding creator {creator_id}: High fraud risk.")
                 continue
 
-            final_score  = int(score_res['ratefluencer_score'])
-            virality     = int(score_res['scores']['growth_score'])
-            brand_match  = int(score_res['scores']['brand_match_score'])
-            authenticity = int(score_res['scores']['authenticity_score'])
-            er_raw       = score_res['engagement_rate']
             er           = f"{er_raw:.1f}%"
-            niche        = score_res['niche']
-            followers_val = score_res['followers']
-            risk_level   = score_res['risk_metrics']['risk_level']
 
             if authenticity < min_auth_val:
                 continue
@@ -1311,8 +1339,17 @@ Return ONLY a valid JSON object with these exact keys (no extra text):
         return jsonify({"error": str(e)}), 500
 
 
-MAX_CONTENT_ITERS  = 3
-VIRALITY_THRESHOLD = 68
+MAX_CONTENT_ITERS  = 5
+VIRALITY_THRESHOLD = 72
+
+# Per-iteration improvement strategy injected into the prompt
+_ITER_STRATEGY = [
+    "Generate baseline viral content for this topic.",
+    "Inject any learned user preferences into the style and tone.",
+    "Apply the top virality optimisation tip from the previous score.",
+    "Make the hook more attention-grabbing in the first 3 words; sharpen the CTA.",
+    "Final polish: add a controversy/curiosity hook and ensure the hashtags are trending.",
+]
 
 
 @app.route("/api/run-agent", methods=["POST"])
@@ -1444,22 +1481,47 @@ Return ONLY JSON (no other text):
   "linkedin_hashtags": "<5-7 professional LinkedIn hashtags>"
 }}"""
 
+        # Load persisted learned preferences for this category
+        learned = _load_learned_prefs().get(
+            detected_category.lower(),
+            _load_learned_prefs().get("general", {})
+        )
+        learned_block = ""
+        if learned and learned.get("upvoted_count", 0) >= 2:
+            learned_block = (
+                f"\n\nLEARNED from {learned['upvoted_count']} upvoted posts "
+                f"(confidence {learned.get('confidence', 0)}%):\n"
+                f"- Preferred tone: {learned.get('detected_tone', 'Inspirational')}\n"
+                f"- Style words that work: {', '.join(learned.get('preferred_words', [])[:4])}\n"
+                f"- Optimal hashtags: ~{learned.get('avg_hashtags', 8)}\n"
+                f"- Avoid: {', '.join(learned.get('avoid_words', [])[:3])}"
+            )
+
         content_attempts = []
         best_content     = None
         best_virality    = -1
         refinement_hint  = None
 
         for content_iter in range(MAX_CONTENT_ITERS):
-            temp = 0.7 + content_iter * 0.05
-            prompt = content_prompt_base
-            if refinement_hint:
-                prompt += f"\n\nIMPROVEMENT HINT for this iteration: {refinement_hint}"
+            # Each iteration has an explicit improvement strategy
+            strategy = _ITER_STRATEGY[min(content_iter, len(_ITER_STRATEGY) - 1)]
+            temp     = 0.65 + content_iter * 0.06
+
+            prompt   = content_prompt_base
+            if learned_block and content_iter >= 1:
+                prompt += learned_block
+            if content_iter == 1 and refinement_hint:
+                prompt += f"\n\nVIRALITY TIP from last iteration: {refinement_hint}"
+            if content_iter >= 2 and refinement_hint:
+                prompt += f"\n\nPREVIOUS SCORE {content_attempts[-1]['virality_score']}. Apply: {refinement_hint}"
+
+            prompt += f"\n\nITERATION {content_iter + 1} STRATEGY: {strategy}"
 
             content_resp = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temp,
-                max_tokens=700,
+                max_tokens=800,
             )
             content_data = _parse_groq_json(content_resp.choices[0].message.content.strip())
 
@@ -1486,7 +1548,9 @@ Return ONLY JSON (no other text):
                 'iteration':       content_iter + 1,
                 'virality_score':  v_score,
                 'bucket':          bucket,
+                'strategy':        strategy,
                 'refinement_used': refinement_hint,
+                'learned_applied': bool(learned_block and content_iter >= 1),
             })
 
             if v_score > best_virality:
@@ -1496,9 +1560,9 @@ Return ONLY JSON (no other text):
             if v_score >= VIRALITY_THRESHOLD or content_iter == MAX_CONTENT_ITERS - 1:
                 break
 
-            # Extract first ^ tip as refinement hint for next iteration
+            # Extract top ^ tip as refinement hint for next iteration
             tips = viral_res.get('optimization_tips', [])
-            refinement_hint = next((t[:60] for t in tips if '^' in t), None)
+            refinement_hint = next((t[:80] for t in tips if '^' in t), None)
 
         if best_content is None:
             best_content = {}
@@ -2593,6 +2657,230 @@ def explain_creator():
 
     except Exception as e:
         logger.error(f"explain failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+LEARNED_PREFS_FILE = BACKEND_DIR / 'learned_preferences.json'
+
+
+def _load_learned_prefs() -> dict:
+    try:
+        if LEARNED_PREFS_FILE.exists():
+            return json.loads(LEARNED_PREFS_FILE.read_text(encoding='utf-8'))
+    except Exception:
+        pass
+    return {}
+
+
+@app.route("/api/agent/learn", methods=["POST"])
+def agent_learn():
+    """
+    Process all stored feedback and extract explicit style preferences.
+    Persists the learned profile to learned_preferences.json so every
+    subsequent content generation call automatically benefits from it.
+    """
+    try:
+        data     = request.get_json() or {}
+        category = data.get("category", "")
+        entries  = _load_feedback()
+
+        if category:
+            cat_entries = [e for e in entries if e.get("category", "").lower() == category.lower()]
+            entries = cat_entries if len(cat_entries) >= 2 else entries
+
+        upvoted   = [e for e in entries if e.get("vote") == "up"]
+        downvoted = [e for e in entries if e.get("vote") == "down"]
+
+        if not upvoted:
+            return jsonify({
+                "learned": False,
+                "message": "No upvoted content yet. Generate and upvote content to activate learning.",
+                "upvoted": 0, "downvoted": len(downvoted),
+            }), 200
+
+        # Extract patterns from upvoted content
+        from collections import Counter
+        all_words: list = []
+        virality_scores: list = []
+        hashtag_counts: list  = []
+
+        for e in upvoted:
+            v = e.get("virality")
+            if v:
+                virality_scores.append(float(v))
+            caption = str(e.get("content", {}).get("caption", ""))
+            hook    = str(e.get("content", {}).get("hook", ""))
+            tags    = str(e.get("content", {}).get("hashtags", ""))
+            all_words.extend(w.lower() for w in (caption + " " + hook).split() if len(w) > 4)
+            hashtag_counts.append(len(tags.split()))
+
+        word_freq    = Counter(all_words)
+        top_words    = [w for w, _ in word_freq.most_common(8) if w not in {"your","with","this","that","from","have","will","they","what"}]
+        avg_virality = round(sum(virality_scores) / max(len(virality_scores), 1), 1)
+        avg_hashtags = int(sum(hashtag_counts) / max(len(hashtag_counts), 1))
+
+        avoid_words: list = []
+        for e in downvoted[-5:]:
+            hook = str(e.get("content", {}).get("hook", ""))
+            avoid_words.extend(w.lower() for w in hook.split() if len(w) > 4)
+
+        # Detect dominant tone from word patterns
+        tone_map = {
+            "Inspirational": {"transform","journey","achieve","dream","success","inspire","believe"},
+            "Educational":   {"learn","know","fact","tip","guide","explain","understand","science"},
+            "Humorous":      {"funny","laugh","joke","haha","lol","meme","prank","hilarious"},
+            "Professional":  {"strategy","growth","business","roi","revenue","metric","professional"},
+        }
+        tone_scores = {t: sum(w in all_words for w in kws) for t, kws in tone_map.items()}
+        detected_tone = max(tone_scores, key=lambda t: tone_scores[t]) if any(tone_scores.values()) else "Inspirational"
+
+        prefs = {
+            "category":       category or "general",
+            "avg_virality":   avg_virality,
+            "preferred_words": top_words[:6],
+            "avoid_words":    list(set(avoid_words))[:4],
+            "avg_hashtags":   avg_hashtags,
+            "detected_tone":  detected_tone,
+            "upvoted_count":  len(upvoted),
+            "downvoted_count": len(downvoted),
+            "confidence":     min(100, len(upvoted) * 12),
+            "last_updated":   pd.Timestamp.now().isoformat(),
+        }
+
+        # Persist preferences
+        existing = _load_learned_prefs()
+        existing[category or "general"] = prefs
+        LEARNED_PREFS_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=True), encoding='utf-8')
+
+        return jsonify({
+            "learned":        True,
+            "preferences":    prefs,
+            "message":        (
+                f"Learned from {len(upvoted)} upvoted posts. "
+                f"Detected tone: {detected_tone}. "
+                f"Top style words: {', '.join(top_words[:4])}. "
+                f"Optimal hashtag count: ~{avg_hashtags}."
+            ),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"agent/learn failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/agent/preferences")
+def agent_preferences():
+    """Return current learned preferences for a category."""
+    try:
+        category = request.args.get("category", "general")
+        prefs    = _load_learned_prefs()
+        cat_pref = prefs.get(category, prefs.get("general", {}))
+        return jsonify({"preferences": cat_pref, "has_preferences": bool(cat_pref)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/generate-video", methods=["POST"])
+@rate_limit("10/hour")
+def generate_video():
+    """
+    Generate a video from a reel script.
+    Primary: Runway ML Gen-3 API (requires RUNWAYML_API_SECRET in .env).
+    Fallback: Returns a detailed production storyboard that a video editor
+              or Runway's web app can use directly.
+    """
+    try:
+        data      = request.get_json() or {}
+        script    = data.get("script", "").strip()
+        reel_idea = data.get("reel_idea", "").strip()
+        category  = data.get("category", "Lifestyle")
+        duration  = int(data.get("duration", 30))
+
+        if not script and not reel_idea:
+            return jsonify({"error": "script or reel_idea is required"}), 400
+
+        runway_key = os.environ.get("RUNWAYML_API_SECRET", "")
+
+        # -- Runway ML path ---------------------------------------------------
+        if runway_key:
+            try:
+                prompt = f"{reel_idea or script[:200]} - {category} content, cinematic, mobile vertical"
+                headers = {
+                    "Authorization": f"Bearer {runway_key}",
+                    "X-Runway-Version": "2024-11-06",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model":       "gen3a_turbo",
+                    "promptText":  prompt,
+                    "promptImage": "https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png",
+                    "duration":    min(10, duration),
+                    "ratio":       "768:1280",
+                    "watermark":   False,
+                }
+                resp = http_requests.post(
+                    "https://api.dev.runwayml.com/v1/image_to_video",
+                    json=payload, headers=headers, timeout=30,
+                )
+                if resp.status_code in (200, 201):
+                    task = resp.json()
+                    return jsonify({
+                        "status":    "generating",
+                        "task_id":   task.get("id"),
+                        "poll_url":  f"https://api.runwayml.com/v1/tasks/{task.get('id')}",
+                        "message":   "Video is generating. Poll poll_url for status.",
+                        "provider":  "Runway ML Gen-3 Alpha",
+                    }), 202
+            except Exception as re:
+                logger.warning(f"Runway API failed: {re}")
+
+        # -- Storyboard fallback ----------------------------------------------
+        storyboard_prompt = f"""You are a professional video director.
+Create a detailed production storyboard for this {duration}-second reel:
+Concept: {reel_idea or script[:300]}
+Category: {category}
+
+Return ONLY valid JSON:
+{{
+  "scenes": [
+    {{"id": 1, "start_sec": 0, "end_sec": 3,
+      "shot": "<camera angle>",
+      "action": "<what happens on screen>",
+      "text_overlay": "<any text/caption to display>",
+      "broll_keyword": "<keyword to search for B-roll footage>"}}
+  ],
+  "music_mood":      "<upbeat/calm/dramatic/inspirational>",
+  "color_grade":     "<warm/cool/vibrant/muted>",
+  "aspect_ratio":    "9:16",
+  "runway_prompt":   "<optimised text prompt for Runway/Veo generation>",
+  "veo_prompt":      "<Google Veo compatible prompt>",
+  "estimated_duration": {duration}
+}}"""
+
+        resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": storyboard_prompt}],
+            temperature=0.6,
+            max_tokens=1000,
+        )
+        storyboard = _parse_groq_json(resp.choices[0].message.content.strip())
+        if not storyboard:
+            return jsonify({"error": "Failed to generate storyboard"}), 500
+
+        return jsonify({
+            "status":     "storyboard_ready",
+            "storyboard": storyboard,
+            "provider":   "AI Storyboard",
+            "message":    (
+                "Full production storyboard generated. "
+                "Set RUNWAYML_API_SECRET in .env to generate actual video with Runway Gen-3."
+            ),
+            "runway_prompt": storyboard.get("runway_prompt", ""),
+            "scenes":        storyboard.get("scenes", []),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"generate-video failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 

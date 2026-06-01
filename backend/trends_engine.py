@@ -273,6 +273,87 @@ def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
         return []
 
 
+def fetch_news_trends(category: str) -> List[Dict]:
+    """
+    Fetch truly real-time trends from live RSS news feeds.
+    No API key required. Sources: Times of India, NDTV, Tech news, Economic Times.
+    Returns topics extracted from current headlines - updated every few minutes.
+    """
+    import xml.etree.ElementTree as ET
+    from datetime import datetime, timezone
+
+    RSS_SOURCES: Dict[str, List[str]] = {
+        'General':     [
+            'https://timesofindia.indiatimes.com/rssfeedmostread.cms',
+            'https://feeds.feedburner.com/ndtvnews-india-news',
+        ],
+        'Technology':  [
+            'https://feeds.feedburner.com/TechCrunch',
+            'https://news.ycombinator.com/rss',
+        ],
+        'Business':    [
+            'https://economictimes.indiatimes.com/rssfeedstopstories.cms',
+            'https://feeds.feedburner.com/entrepreneur/latest',
+        ],
+        'Finance':     [
+            'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms',
+            'https://feeds.feedburner.com/moneycontrol/news',
+        ],
+        'Fashion':     ['https://www.vogue.in/feed/'],
+        'Fitness':     ['https://www.healthline.com/rss/health-news'],
+        'Travel':      ['https://www.lonelyplanet.com/news/feed'],
+        'Food':        ['https://www.bonappetit.com/feed/rss'],
+    }
+
+    feeds = RSS_SOURCES.get(category, RSS_SOURCES['General'])
+    headers = {'User-Agent': 'ratefluencer-trends/1.0', 'Accept': 'application/rss+xml, application/xml'}
+    results = []
+    seen: set = set()
+
+    for feed_url in feeds[:2]:
+        try:
+            resp = _requests.get(feed_url, headers=headers, timeout=6)
+            if resp.status_code != 200:
+                continue
+            root = ET.fromstring(resp.content)
+            items = root.findall('.//item')[:8]
+            for item in items:
+                title_el = item.find('title')
+                title = title_el.text.strip() if title_el is not None else ''
+                if not title or title.lower() in seen:
+                    continue
+                seen.add(title.lower())
+
+                # Freshness: items at top of feed = most recent
+                rank = items.index(item)
+                recency_score = max(0, 90 - rank * 8)   # top item = 90, drops off
+
+                results.append({
+                    'topic':            title[:80],
+                    'keyword':          title[:40],
+                    'trend_score':      recency_score,
+                    'growth_velocity':  recency_score,
+                    'novelty':          85,               # news = high novelty
+                    'current_interest': recency_score,
+                    'audience_fit':     60,
+                    'source':           'Live News',
+                    'why_trending':     f'Breaking: "{title[:50]}..." - top story right now',
+                    'data_backed':      True,
+                    'real_time':        True,
+                })
+                if len(results) >= 4:
+                    break
+            if len(results) >= 4:
+                break
+            time.sleep(0.3)
+        except Exception as e:
+            logger.debug(f"RSS news fetch failed for {feed_url}: {e}")
+            continue
+
+    results.sort(key=lambda x: x['trend_score'], reverse=True)
+    return results[:3]
+
+
 def fetch_combined_trends(category: str, geo: str = 'IN') -> List[Dict]:
     """
     Merge Google Trends + Reddit into a single ranked list.
@@ -294,14 +375,18 @@ def fetch_combined_trends(category: str, geo: str = 'IN') -> List[Dict]:
                 all_topics.add(key)
                 combined.append(item)
 
-    # Priority: Google Trends -> Reddit -> YouTube
-    _add(gt[:3])
-    _add(reddit[:2])
-    _add(youtube[:2])
+    news = fetch_news_trends(category)
 
-    # If every source failed, try Reddit + YouTube alone
+    # Priority: Google Trends (real search data) -> Live News (freshest) -> Reddit -> YouTube
+    _add(gt[:2])
+    _add(news[:2])
+    _add(reddit[:1])
+    _add(youtube[:1])
+
+    # If every source failed, try News + Reddit + YouTube alone
     if not combined:
-        _add(reddit[:3])
+        _add(news[:3])
+        _add(reddit[:2])
         _add(youtube[:2])
 
     combined.sort(key=lambda x: x['trend_score'], reverse=True)

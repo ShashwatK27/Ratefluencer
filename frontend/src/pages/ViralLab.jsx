@@ -4,6 +4,66 @@ import axios from "axios";
 import { config } from "../config.js";
 import ReelAssets from "../components/ReelAssets.jsx";
 
+// -- Quick Video Launcher (compact, inline) ------------------------------------
+const QUICK_SERVICES = [
+  { id: 'kling',  label: 'Kling AI',     url: 'https://klingai.com/text-to-video/new',                       color: '#68B8F0', free: '66 free/day'  },
+  { id: 'luma',   label: 'Luma',         url: 'https://lumalabs.ai/dream-machine',                            color: '#B068F0', free: '30 free/mo'   },
+  { id: 'pika',   label: 'Pika Labs',    url: 'https://pika.art/create',                                      color: '#F07868', free: 'free tier'    },
+  { id: 'runway', label: 'Runway',       url: 'https://app.runwayml.com/video-tools/teams',                   color: '#C8F068', free: 'needs credits' },
+  { id: 'veo',    label: 'Google Veo',   url: 'https://aitestkitchen.withgoogle.com/tools/video-fx',          color: '#F0C968', free: 'free'         },
+];
+
+function QuickVideoLauncher({ prompt }) {
+  const [copied, setCopied] = useState(null);
+  const [msg, setMsg]       = useState('');
+
+  const launch = (svc) => {
+    navigator.clipboard.writeText(prompt || '').then(() => {
+      setCopied(svc.id);
+      setMsg(`Prompt copied! ${svc.label} opened -- just paste (Ctrl+V) and click Generate.`);
+      setTimeout(() => { setCopied(null); setMsg(''); }, 4000);
+    }).catch(() => {
+      setMsg('Auto-copy failed -- please manually copy the prompt above.');
+      setTimeout(() => setMsg(''), 3000);
+    });
+    window.open(svc.url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <div style={{ padding: "12px 14px", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", marginTop: "4px" }}>
+      <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "10px", letterSpacing: ".05em" }}>
+        Generate Video -- click to copy prompt + open service
+      </div>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        {QUICK_SERVICES.map(svc => (
+          <button
+            key={svc.id}
+            onClick={() => launch(svc)}
+            style={{
+              padding: "7px 14px", borderRadius: "20px", cursor: "pointer", fontSize: "12px",
+              border: `1px solid ${copied === svc.id ? svc.color : 'var(--border)'}`,
+              background: copied === svc.id ? `${svc.color}15` : "transparent",
+              color: copied === svc.id ? svc.color : "var(--text2)",
+              transition: "all .15s", fontFamily: "var(--font-body)",
+              display: "flex", alignItems: "center", gap: "5px",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = svc.color; e.currentTarget.style.color = svc.color; }}
+            onMouseLeave={e => { if (copied !== svc.id) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text2)"; }}}
+          >
+            {copied === svc.id ? "Copied + Opened!" : svc.label}
+            <span style={{ fontSize: "9px", opacity: .7 }}>({svc.free})</span>
+          </button>
+        ))}
+      </div>
+      {msg && (
+        <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const IG_COLOR    = "#F07868";          // Instagram pinkish-orange (coral)
 const IG_COLOR_DIM = "rgba(240,120,104,0.12)";
 const IG_BORDER    = "rgba(240,120,104,0.3)";
@@ -527,6 +587,11 @@ export default function ViralLab() {
 
             {platform === "instagram" && (
               <ReelAssets result={result} category={category} />
+            )}
+
+            {/* One-click video generator launchers */}
+            {platform === "instagram" && result?.reel_idea && (
+              <QuickVideoLauncher prompt={result.reel_idea + (result.script ? ' ' + result.script.slice(0, 100) : '')} />
             )}
 
             <FeedbackBar contentKey={`${platform}_${topic}`} result={result} />

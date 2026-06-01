@@ -36,6 +36,9 @@ export const config = {
       explain:           `${API_URL}/api/explain`,
       feedback:          `${API_URL}/api/feedback`,
       feedbackHistory:   `${API_URL}/api/feedback/history`,
+      agentLearn:        `${API_URL}/api/agent/learn`,
+      agentPreferences:  `${API_URL}/api/agent/preferences`,
+      generateVideo:     `${API_URL}/api/generate-video`,
     }
   },
   app: {
