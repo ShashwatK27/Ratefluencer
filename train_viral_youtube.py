@@ -41,17 +41,22 @@ except ImportError:
 
 BACKEND  = Path(__file__).parent / 'backend'
 DATA_CSV = BACKEND / 'youtube_content_data.csv'
+AUG_CSV  = BACKEND / 'youtube_content_augmented.csv'
 
 print("=" * 60)
 print("VIRAL MODEL v2  -  YouTube Content Features (fixed)")
 print("=" * 60)
 
-if not DATA_CSV.exists():
-    print("ERROR: youtube_content_data.csv not found. Run collect_youtube_data.py first.")
+# Prefer augmented dataset when available
+if AUG_CSV.exists():
+    df = pd.read_csv(AUG_CSV).fillna(0)
+    print(f"Loaded AUGMENTED dataset: {len(df):,} samples (real + synthetic Mixup)")
+elif DATA_CSV.exists():
+    df = pd.read_csv(DATA_CSV).fillna(0)
+    print(f"Loaded original: {len(df):,} videos  (run augment_youtube_data.py for more)")
+else:
+    print("ERROR: No dataset found. Run collect_youtube_data.py first.")
     exit(1)
-
-df = pd.read_csv(DATA_CSV).fillna(0)
-print(f"Loaded {len(df):,} videos across {df['category'].nunique()} categories")
 
 # ── Re-label using ABSOLUTE view thresholds ───────────────────────────────────
 # The collected CSV used z-scores within our biased sample (all popular videos),
