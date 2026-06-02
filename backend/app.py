@@ -86,8 +86,54 @@ except ImportError:
             return f
         return decorator
 
-# Groq client
-groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+# Groq client — gracefully handles missing key with demo mode
+_groq_key = os.environ.get("GROQ_API_KEY", "")
+_DEMO_MODE = not _groq_key or _groq_key == "your_groq_api_key_here"
+groq_client = Groq(api_key=_groq_key or "demo") if not _DEMO_MODE else None
+if _DEMO_MODE:
+    import logging as _log
+    _log.getLogger(__name__).warning("GROQ_API_KEY not set — running in DEMO MODE (pre-built responses)")
+
+# -- Demo mode responses (shown when GROQ_API_KEY is not configured) ----------
+_DEMO_CONTENT = {
+    "reel_idea": "Show a before-and-after transformation of your morning skincare routine using only 3 products — minimal, effective, and under ₹500.",
+    "script": "Hook: 'I spent ₹5000 on skincare last year. Now I spend ₹500. Here's what changed.' \nScene 1: Cluttered shelf full of products. \nScene 2: Hand picks 3 products — cleanser, moisturizer, SPF. \nScene 3: 30-day skin comparison. \nCTA: 'Which 3 products would you keep?'",
+    "caption": "Less is more — especially for your skin ✨ Dropped my 12-step routine for just 3 products and my skin has never looked better. Cleanser + moisturizer + SPF is all you need. What's your holy trinity? 👇 #MinimalistSkincare #SkincareRoutine #GlowUp #SkincareTips #IndianSkincare",
+    "hashtags": "#MinimalistSkincare #SkincareRoutine #GlowUp #SkincareTips #IndianSkincare #BeautyHacks #NaturalSkin #CleanBeauty #SkinFirst #GlassSkein",
+    "hook": "I wasted ₹5000 on skincare. Then I discovered the 3-product rule.",
+    "virality_score": 78,
+    "tone": "Authentic",
+    "category": "Beauty",
+    "content_attempts": [
+        {"iteration": 1, "virality_score": 61, "caption": "Simple skincare routine for glowing skin.", "reel_idea": "Basic skincare demo"},
+        {"iteration": 2, "virality_score": 68, "caption": "3-product skincare that actually works!", "reel_idea": "Minimalist routine reveal"},
+        {"iteration": 3, "virality_score": 74, "caption": "Before and after: 3 products vs 12 steps", "reel_idea": "Transformation comparison"},
+        {"iteration": 4, "virality_score": 78, "caption": "Less is more — especially for your skin ✨", "reel_idea": "3-product morning routine reveal"},
+    ],
+}
+
+_DEMO_TRENDS = [
+    {"topic": "Glass Skin Routine India 2026", "trend_score": 88, "growth_velocity": 85, "audience_fit": 90, "why_trending": "Korean glass skin trend surging on Indian Instagram — low-cost dupes driving mass adoption", "source": "Google Trends", "data_backed": True},
+    {"topic": "Ayurvedic Skincare Revival", "trend_score": 82, "growth_velocity": 78, "audience_fit": 88, "why_trending": "Heritage ingredients like turmeric, neem, and ashwagandha going viral as sustainable beauty alternatives", "source": "Reddit", "data_backed": True},
+    {"topic": "SPF Every Day Campaign", "trend_score": 79, "growth_velocity": 72, "audience_fit": 85, "why_trending": "Dermatologists pushing daily SPF — creator education content getting 3× normal engagement", "source": "YouTube", "data_backed": True},
+    {"topic": "Skin Cycling for Beginners", "trend_score": 74, "growth_velocity": 69, "audience_fit": 82, "why_trending": "4-night skin cycling protocol making complex routines accessible for first-time skincare users", "source": "Google Trends", "data_backed": True},
+    {"topic": "₹500 Skincare Challenge", "trend_score": 71, "growth_velocity": 80, "audience_fit": 92, "why_trending": "Budget-conscious beauty content resonating strongly with Tier 2/3 Indian audience", "source": "AI Analysis", "data_backed": False},
+]
+
+_DEMO_STORYBOARD = {
+    "status": "scenes_ready",
+    "provider": "Pollinations.ai (free AI image generation)",
+    "music_mood": "upbeat",
+    "color_palette": "warm golden",
+    "style": "cinematic",
+    "total_scenes": 4,
+    "scenes": [
+        {"id": 1, "start_sec": 0, "end_sec": 5, "shot": "close-up", "action": "Hands cluttered with 12 skincare bottles on a bathroom shelf", "text_overlay": "The Problem", "duration_sec": 5, "image_url": "https://image.pollinations.ai/prompt/cluttered+skincare+shelf+bathroom+12+products+overhead+shot+warm+golden+cinematic+9:16+vertical?width=540&height=960&seed=42&model=flux&nologo=true"},
+        {"id": 2, "start_sec": 5, "end_sec": 12, "shot": "medium", "action": "Hand picking only 3 products: cleanser, moisturizer, SPF from the shelf", "text_overlay": "The Solution", "duration_sec": 7, "image_url": "https://image.pollinations.ai/prompt/three+skincare+products+minimal+clean+bathroom+counter+warm+light+cinematic+9:16+vertical?width=540&height=960&seed=43&model=flux&nologo=true"},
+        {"id": 3, "start_sec": 12, "end_sec": 20, "shot": "close-up", "action": "Face transformation — applying the 3-product routine, glowing healthy skin", "text_overlay": "30-Day Result", "duration_sec": 8, "image_url": "https://image.pollinations.ai/prompt/woman+applying+skincare+glowing+skin+bathroom+mirror+warm+golden+hour+cinematic+9:16+vertical?width=540&height=960&seed=44&model=flux&nologo=true"},
+        {"id": 4, "start_sec": 20, "end_sec": 30, "shot": "wide", "action": "Before-after split showing cluttered shelf vs minimal 3 products", "text_overlay": "Less is More ✨", "duration_sec": 10, "image_url": "https://image.pollinations.ai/prompt/before+after+skincare+shelf+minimal+vs+cluttered+split+screen+cinematic+9:16+vertical?width=540&height=960&seed=45&model=flux&nologo=true"},
+    ],
+}
 
 BACKEND_DIR = Path(__file__).parent.absolute()
 PARENT_DIR = BACKEND_DIR.parent
@@ -1660,6 +1706,9 @@ def generate_content():
         if not topic:
             return jsonify({"error": "topic is required"}), 400
 
+        if _DEMO_MODE:
+            return jsonify({**_DEMO_CONTENT, "topic": topic, "tone": tone, "category": content_category, "_demo": True}), 200
+
         insights     = viral_predictor.get_content_insights(content_category)
         best_hours   = insights.get('best_hours', [18, 12, 20])
         best_days    = insights.get('best_days', ['Wednesday', 'Friday'])
@@ -1759,6 +1808,15 @@ def run_agent():
 
         if not goal:
             return jsonify({"error": "goal is required"}), 400
+
+        if _DEMO_MODE:
+            return jsonify({
+                **_DEMO_CONTENT,
+                "goal": goal, "category": "Beauty",
+                "top_creator": {"name": "Ananya Glow", "niche": "beauty", "engagement_rate": 6.2, "ratefluencer_score": 84},
+                "trends": [t["topic"] for t in _DEMO_TRENDS[:3]],
+                "iterations": 4, "_demo": True,
+            }), 200
 
         logger.info(f"Running autonomous agent for goal: '{goal}'")
 
@@ -2769,7 +2827,8 @@ def _get_tier_key(followers: int) -> str:
 def groq_status():
     """Check whether a Groq API key is configured."""
     key = os.environ.get("GROQ_API_KEY", "")
-    return jsonify({"available": bool(key and key.startswith("gsk_"))}), 200
+    available = bool(key and key.startswith("gsk_"))
+    return jsonify({"available": available, "demo_mode": _DEMO_MODE}), 200
 
 
 @app.route("/api/set-groq-key", methods=["POST"])
@@ -2832,6 +2891,9 @@ def discover_trends():
         data     = request.get_json() or {}
         category = data.get("category", "General")
         context  = data.get("context", "").strip()
+
+        if _DEMO_MODE:
+            return jsonify({"trends": _DEMO_TRENDS, "source": "Demo Data", "data_backed": True, "_demo": True}), 200
 
         # Fetch real-data trends
         gt = fetch_combined_trends(category)
@@ -3476,6 +3538,9 @@ def generate_video():
         reel_idea = data.get("reel_idea", "").strip()
         hook      = data.get("hook", "").strip()
         category  = data.get("category", "Lifestyle")
+
+        if _DEMO_MODE:
+            return jsonify({**_DEMO_STORYBOARD, "_demo": True}), 200
         duration  = int(data.get("duration", 30))
 
         if not script and not reel_idea and not hook:

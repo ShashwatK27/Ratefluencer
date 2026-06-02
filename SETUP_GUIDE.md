@@ -1,4 +1,31 @@
-# Ratefluencer Setup & Deployment Guide
+# Ratefluencer Setup Guide
+
+## Quick Start (No API Keys Needed)
+
+The platform runs in **Demo Mode** automatically if no API keys are configured.
+
+| Feature | Without API Keys | With Groq Key |
+|---------|-----------------|---------------|
+| Creator Search & Scoring | ✅ Full ML pipeline | ✅ |
+| Brand Matching (33K creators) | ✅ ChromaDB + TF-IDF | ✅ |
+| Authenticity / Growth / Viral scores | ✅ All 6 ML models | ✅ |
+| AI Content Generation | ✅ Demo responses shown | ✅ Real AI output |
+| AI Agent (5-iteration loop) | ✅ Demo responses shown | ✅ Real AI output |
+| Trend Discovery | ✅ Demo trends shown | ✅ Live Google/Reddit/YouTube |
+| Visual Storyboard | ✅ Demo scenes shown | ✅ Real AI scenes |
+| Voiceover | ✅ Browser TTS | ✅ ElevenLabs HD |
+
+## Get a FREE Groq API Key (2 minutes, no credit card)
+
+1. Go to **https://console.groq.com**
+2. Sign up (GitHub login works)
+3. Click **API Keys → Create API Key**
+4. Copy the key (starts with `gsk_`)
+5. Paste it in `backend/.env` as `GROQ_API_KEY=gsk_...`
+
+That's it — Groq's free tier gives 14,400 requests/day.
+
+---
 
 ## Fixed Issues ✅
 
