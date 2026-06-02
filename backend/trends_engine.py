@@ -649,24 +649,33 @@ def fetch_news_trends(category: str) -> List[Dict]:
     from datetime import datetime, timezone
 
     RSS_SOURCES: Dict[str, List[str]] = {
-        'General':      ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
-        'Technology':   ['https://feeds.feedburner.com/TechCrunch', 'https://news.ycombinator.com/rss'],
-        'Business':     ['https://economictimes.indiatimes.com/rssfeedstopstories.cms'],
-        'Finance':      ['https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms'],
-        'Fashion':      ['https://www.vogue.in/feed/'],
-        'Beauty':       ['https://www.allure.com/feed/rss'],
-        'Fitness':      ['https://www.menshealth.com/rss/all.xml/', 'https://www.womenshealthmag.com/rss/all.xml/'],
-        'Food':         ['https://www.bonappetit.com/feed/rss', 'https://food52.com/blog/feed'],
-        'Travel':       ['https://www.lonelyplanet.com/news/feed', 'https://www.cntraveler.com/feed/rss'],
-        'Music':        ['https://pitchfork.com/rss/news/'],
-        'Gaming':       ['https://www.pcgamer.com/rss/'],
-        'Photography':  ['https://petapixel.com/feed/'],
-        'Comedy':       ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
-        'Interior':     ['https://www.architecturaldigest.com/feed/rss'],
-        'Pet':          ['https://www.akc.org/rss/'],
-        'Lifestyle':    ['https://www.refinery29.com/en-us/rss.xml'],
-        'Education':    ['https://feeds.feedburner.com/TechCrunch'],
+        'General':          ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
+        'Technology':       ['https://feeds.feedburner.com/TechCrunch', 'https://news.ycombinator.com/rss'],
+        'AI':               ['https://feeds.feedburner.com/TechCrunch', 'https://news.ycombinator.com/rss'],
+        'Business':         ['https://economictimes.indiatimes.com/rssfeedstopstories.cms', 'https://feeds.feedburner.com/entrepreneur/latest'],
+        'Startups':         ['https://feeds.feedburner.com/TechCrunch', 'https://feeds.feedburner.com/entrepreneur/latest'],
+        'Finance':          ['https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms'],
+        'Creator Economy':  ['https://feeds.feedburner.com/entrepreneur/latest', 'https://feeds.feedburner.com/TechCrunch'],
+        'Fashion':          ['https://www.vogue.in/feed/'],
+        'Beauty':           ['https://www.allure.com/feed/rss'],
+        'Fitness':          ['https://www.menshealth.com/rss/all.xml/', 'https://www.womenshealthmag.com/rss/all.xml/'],
+        'Food':             ['https://www.bonappetit.com/feed/rss', 'https://food52.com/blog/feed'],
+        'Travel':           ['https://www.lonelyplanet.com/news/feed', 'https://www.cntraveler.com/feed/rss'],
+        'Music':            ['https://pitchfork.com/rss/news/'],
+        'Gaming':           ['https://www.pcgamer.com/rss/'],
+        'Photography':      ['https://petapixel.com/feed/'],
+        'Comedy':           ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
+        'Interior':         ['https://www.architecturaldigest.com/feed/rss'],
+        'Pet':              ['https://www.akc.org/rss/'],
+        'Lifestyle':        ['https://www.refinery29.com/en-us/rss.xml'],
+        'Education':        ['https://feeds.feedburner.com/TechCrunch'],
     }
+
+    # LinkedIn trending content via their public news RSS (no auth needed)
+    LINKEDIN_FEEDS = [
+        'https://www.linkedin.com/pulse/rss/?type=article',
+        'https://engineering.linkedin.com/blog/rss',
+    ]
 
     feeds = RSS_SOURCES.get(category, RSS_SOURCES['General'])
     headers = {'User-Agent': 'ratefluencer-trends/1.0', 'Accept': 'application/rss+xml, application/xml'}

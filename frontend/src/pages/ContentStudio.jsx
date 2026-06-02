@@ -220,6 +220,82 @@ export default function ContentStudio() {
 
   const step = !trends ? 1 : !script ? 2 : !content ? 3 : 4;
 
+  // Storyboard + video state (Step 2)
+  const [storyboardLoading, setStoryboardLoading] = useState(false);
+  const [storyboard,        setStoryboard]        = useState(null);
+  const [selectedScenes,    setSelectedScenes]    = useState(new Set());
+  const [videoLoading,      setVideoLoading]      = useState(false);
+  const [videoUrl,          setVideoUrl]          = useState(null);
+  const [videoMsg,          setVideoMsg]          = useState('');
+
+  const fetchStoryboard = async () => {
+    if (!script) return;
+    setStoryboardLoading(true); setStoryboard(null); setSelectedScenes(new Set()); setVideoUrl(null);
+    try {
+      const res = await fetch(config.api.endpoints.generateStoryboard, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reel_idea:   selectedTrend?.topic || '',
+          hook:        script.hook || '',
+          story:       script.story || '',
+          key_insights:(script.key_insights || []).join('. '),
+          cta:         script.cta || '',
+          category,
+          duration:    script.estimated_duration || 45,
+        }),
+      });
+      const d = await res.json();
+      if (d.scenes) {
+        setStoryboard(d);
+        // Pre-select first 3 scenes by default
+        setSelectedScenes(new Set(d.scenes.slice(0, 3).map(s => s.id)));
+      } else {
+        setVideoMsg(d.error || 'Storyboard generation failed');
+      }
+    } catch (e) { setVideoMsg('Storyboard failed: ' + e.message); }
+    finally { setStoryboardLoading(false); }
+  };
+
+  const toggleScene = (id) => {
+    setSelectedScenes(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { if (next.size > 2) next.delete(id); }
+      else              { if (next.size < 4) next.add(id); }
+      return next;
+    });
+  };
+
+  const generateVideo = async () => {
+    if (!storyboard) return;
+    const chosenScenes = storyboard.scenes.filter(s => selectedScenes.has(s.id));
+    setVideoLoading(true); setVideoUrl(null); setVideoMsg('Generating images → video (~40s)...');
+    try {
+      const res = await fetch(config.api.endpoints.generateVideo, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reel_idea:         selectedTrend?.topic || '',
+          hook:              script.hook || '',
+          story:             script.story || '',
+          key_insights:      (script.key_insights || []).join('. '),
+          cta:               script.cta || '',
+          category,
+          duration:          script.estimated_duration || 45,
+          use_script_scenes: true,
+          selected_scenes:   chosenScenes,
+        }),
+      });
+      const d = await res.json();
+      if (d.video_b64) {
+        const blob = new Blob([Uint8Array.from(atob(d.video_b64), c => c.charCodeAt(0))], { type: 'video/mp4' });
+        setVideoUrl(URL.createObjectURL(blob));
+        setVideoMsg(d.message || 'Video ready');
+      } else {
+        setVideoMsg(d.error || 'Generation failed — try again');
+      }
+    } catch (e) { setVideoMsg('Video generation failed: ' + e.message); }
+    finally { setVideoLoading(false); }
+  };
+
   // Step 1: Discover trends
   const discoverTrends = async () => {
     setLoadingTrends(true); setError(''); setTrends(null); setSelectedTrend(null); setScript(null); setContent(null);
@@ -441,6 +517,81 @@ export default function ContentStudio() {
 
                 {script.virality && <ViralityRing score={script.virality.score} label={script.virality.label} />}
                 {script.virality && <ViralityBreakdown signals={script.virality.signals} />}
+
+                {/* Storyboard + Video Generation */}
+                <div style={{ marginTop: '1.5rem', padding: '1.25rem', borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg,rgba(200,240,104,0.04),rgba(104,184,240,0.04))', border: '1px solid rgba(200,240,104,0.2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>🎬 Reel Video Generator</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '2px' }}>
+                        {storyboard ? `Select 2-4 scenes → Generate Video` : 'Generate a storyboard first, then pick scenes'}
+                      </div>
+                    </div>
+                    {!storyboard && (
+                      <button onClick={fetchStoryboard} disabled={storyboardLoading}
+                        style={{ padding: '8px 16px', borderRadius: '100px', cursor: storyboardLoading ? 'wait' : 'pointer', background: 'rgba(200,240,104,0.12)', border: '1px solid rgba(200,240,104,0.35)', color: 'var(--accent)', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)', opacity: storyboardLoading ? 0.6 : 1 }}>
+                        {storyboardLoading ? '⏳ Building...' : 'Generate Storyboard →'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Storyboard scene grid */}
+                  {storyboard && (
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
+                        Click to select scenes ({selectedScenes.size} selected, max 4) · {storyboard.color_grade} · {storyboard.music_mood}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '8px', marginBottom: '12px' }}>
+                        {storyboard.scenes.map(scene => {
+                          const selected = selectedScenes.has(scene.id);
+                          return (
+                            <div key={scene.id} onClick={() => toggleScene(scene.id)}
+                              style={{ padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', transition: 'all .15s',
+                                background: selected ? 'rgba(200,240,104,0.08)' : 'var(--bg3)',
+                                border: `1px solid ${selected ? 'rgba(200,240,104,0.4)' : 'var(--border)'}`,
+                              }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '10px', color: selected ? 'var(--accent)' : 'var(--text3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
+                                  Scene {scene.id} · {scene.label || scene.shot}
+                                </span>
+                                {selected && <span style={{ fontSize: '10px', color: 'var(--accent)' }}>✓</span>}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text2)', lineHeight: 1.4 }}>{String(scene.action || '').slice(0, 65)}</div>
+                              {scene.text_overlay && (
+                                <div style={{ fontSize: '10px', color: 'var(--gold)', marginTop: '3px', fontStyle: 'italic' }}>"{scene.text_overlay}"</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button onClick={generateVideo} disabled={videoLoading || selectedScenes.size < 2}
+                          style={{ padding: '9px 18px', borderRadius: '100px', cursor: (videoLoading || selectedScenes.size < 2) ? 'not-allowed' : 'pointer',
+                            background: 'rgba(176,104,240,0.15)', border: '1px solid rgba(176,104,240,0.4)',
+                            color: 'var(--purple)', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-body)',
+                            opacity: (videoLoading || selectedScenes.size < 2) ? 0.5 : 1 }}>
+                          {videoLoading ? '⏳ Generating Video...' : videoUrl ? '↻ Regenerate' : `Generate Video (${selectedScenes.size} scenes) →`}
+                        </button>
+                        <button onClick={() => { setStoryboard(null); setVideoUrl(null); setVideoMsg(''); }} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>
+                          ↻ New Storyboard
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {videoMsg && !videoUrl && (
+                    <div style={{ fontSize: '11px', color: 'var(--accent)', fontFamily: 'var(--font-mono)', marginTop: '8px' }}>{videoMsg}</div>
+                  )}
+                  {videoUrl && (
+                    <div style={{ marginTop: '12px' }}>
+                      <video src={videoUrl} controls autoPlay loop style={{ width: '100%', maxWidth: '280px', borderRadius: '10px', border: '1px solid rgba(176,104,240,0.4)', display: 'block' }} />
+                      <a href={videoUrl} download="ratefluencer-reel.mp4" style={{ display: 'inline-block', marginTop: '6px', fontSize: '12px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                        ⬇ Download MP4
+                      </a>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -57,7 +57,7 @@ export default function ShortlistPage() {
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <button onClick={() => navigate("/")} className="btn btn-ghost btn-sm" style={{ fontSize: "13px", marginBottom: "1.5rem" }}>← Home</button>
-          <div style={{ maxWidth: "860px" }}>
+          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
 
             <div style={{ marginBottom: "2rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
               <div>

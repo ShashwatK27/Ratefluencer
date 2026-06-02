@@ -39,7 +39,9 @@ export const config = {
       feedbackHistory:   `${API_URL}/api/feedback/history`,
       agentLearn:        `${API_URL}/api/agent/learn`,
       agentPreferences:  `${API_URL}/api/agent/preferences`,
-      generateVideo:     `${API_URL}/api/generate-video`,
+      generateVideo:      `${API_URL}/api/generate-video`,
+      generateStoryboard: `${API_URL}/api/generate-storyboard`,
+      videoStatus:       (taskId, provider) => `${API_URL}/api/video-status/${taskId}?provider=${provider || 'fal'}`,
     }
   },
   app: {

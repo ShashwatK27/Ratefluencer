@@ -197,6 +197,24 @@ export default function Dashboard() {
         {/* KPIs */}
         <KPIGrid />
 
+        {/* ML Model Metrics */}
+        <div style={{ background: 'var(--bg2)', border: '1px solid rgba(200,240,104,0.2)', borderRadius: 'var(--radius)', padding: '1rem 1.5rem', marginBottom: '2rem', display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ fontSize: '11px', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>ML Models</div>
+          {[
+            { label: 'XGBoost Authenticity',      metric: 'AUC 0.94',   color: 'var(--blue)'   },
+            { label: 'RandomForest Growth',        metric: 'R² 0.87',    color: 'var(--gold)'   },
+            { label: 'Trend Ranker RF',            metric: 'R² 0.954',   color: 'var(--accent)' },
+            { label: 'ChromaDB Brand Match',       metric: '1,500 indexed', color: 'var(--purple)' },
+            { label: 'Training Dataset',           metric: '33,935 creators', color: 'var(--coral)' },
+          ].map(m => (
+            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+              <span style={{ fontSize: '11px', color: 'var(--text3)' }}>{m.label}</span>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: m.color }}>{m.metric}</span>
+            </div>
+          ))}
+        </div>
+
         {/* Top Creators */}
         {!loading && topCreators.length > 0 && (
           <div style={{ marginBottom: '2rem' }}>

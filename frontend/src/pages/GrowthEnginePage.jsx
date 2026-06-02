@@ -26,7 +26,7 @@ export default function GrowthEnginePage() {
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <button onClick={() => navigate("/")} className="btn btn-ghost btn-sm" style={{ fontSize: "13px", marginBottom: "1.5rem" }}>← Home</button>
-          <div style={{ maxWidth: "860px" }}>
+          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
 
             <div style={{ marginBottom: "2rem" }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "28px", marginBottom: "4px" }}>

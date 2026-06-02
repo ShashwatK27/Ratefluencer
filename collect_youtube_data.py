@@ -31,16 +31,21 @@ if not API_KEY or API_KEY == 'your_youtube_api_key_here':
 
 # Categories to collect + their search query
 CATEGORIES = {
-    'Technology':    'tech review gadget smartphone india 2025',
-    'Beauty':        'skincare makeup beauty tutorial india',
-    'Fitness':       'workout fitness gym yoga exercise india',
-    'Fashion':       'fashion outfit style india',
-    'Food':          'recipe cooking street food india',
-    'Travel':        'travel vlog india destination',
-    'Music':         'new song music india 2025',
-    'Gaming':        'gaming india youtube 2025',
-    'Finance':       'investing money stock SIP india finance',
-    'Comedy':        'comedy funny india shorts',
+    'Technology':       'tech review gadget smartphone india 2025',
+    'Beauty':           'skincare makeup beauty tutorial india',
+    'Fitness':          'workout fitness gym yoga exercise india',
+    'Fashion':          'fashion outfit style india',
+    'Food':             'recipe cooking street food india',
+    'Travel':           'travel vlog india destination',
+    'Music':            'new song music india 2025',
+    'Gaming':           'gaming esports india youtube 2025',
+    'Finance':          'investing money stock SIP mutual fund india',
+    'Comedy':           'comedy funny india shorts',
+    'AI':               'artificial intelligence AI tools ChatGPT productivity 2025',
+    'Business':         'business entrepreneur startup india success',
+    'Education':        'online learning study tips students india',
+    'Wellness':         'mental health wellness meditation self care india',
+    'Creator Economy':  'content creator influencer youtube growth tips india',
 }
 SINCE_DAYS    = 90       # last 90 days for dataset (more data)
 MAX_PER_CAT   = 50       # videos per category for training

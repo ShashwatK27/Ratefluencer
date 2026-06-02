@@ -160,11 +160,14 @@ class ContentQualityScorer:
             logger.warning(f"ContentQualityScorer failed to load: {e}")
 
     def _build_index(self):
-        # Prefer real YouTube reference bank if it exists (built by collect_youtube_data.py)
+        # Start with hand-curated reference bank (clean English, style-consistent with AI output)
+        merged = {k: list(v) for k, v in _REFERENCE_BANK.items()}
+
+        # Supplement with YouTube reference bank — filter out non-English / hashtag-heavy titles
         yt_bank_path = Path(__file__).parent / 'yt_reference_bank.json'
         if yt_bank_path.exists():
             try:
-                import json
+                import json, re
                 with open(yt_bank_path, encoding='utf-8') as f:
                     yt_bank = json.load(f)
                 # FIX: hand-curated Instagram-style examples take PRIORITY.
@@ -186,12 +189,6 @@ class ContentQualityScorer:
                 return
             except Exception as e:
                 logger.warning(f"YouTube reference bank load failed, using hand-curated: {e}")
-
-        # Fallback: hand-curated reference bank
-        for cat, examples in _REFERENCE_BANK.items():
-            self._index[cat] = self._model.encode(
-                examples, batch_size=16, show_progress_bar=False
-            )
 
     def _resolve_category(self, category: str) -> str:
         key = category.lower().strip()
@@ -222,14 +219,9 @@ class ContentQualityScorer:
 
         # Use mean of top-3 similarities (robust, not swayed by single outlier)
         top3_mean = float(np.mean(sorted(sims, reverse=True)[:3]))
-
-        # Calibrated scale based on observed cosine similarity ranges:
-        #   0.20 = generic / unrelated content (score 0)
-        #   0.40 = decent content in the right category (score 50)
-        #   0.60 = strong content matching viral patterns (score 100)
-        # Formula: (sim - 0.20) / 0.40 * 100  -- linear mapping over [0.20, 0.60]
-        SIM_LOW  = 0.20   # anything at/below this scores 0
-        SIM_HIGH = 0.60   # anything at/above this scores 100
+        # Calibrated scale: 0.20=generic(0) → 0.40=decent(50) → 0.60=viral(100)
+        SIM_LOW  = 0.20
+        SIM_HIGH = 0.60
         raw_score = (top3_mean - SIM_LOW) / (SIM_HIGH - SIM_LOW) * 100
         score     = int(max(0, min(100, raw_score)))
 
