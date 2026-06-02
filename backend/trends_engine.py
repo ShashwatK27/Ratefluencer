@@ -115,9 +115,20 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     'Music':         ['new Bollywood songs', 'music trends India', 'indie music India', 'music playlist 2025'],
     'Photography':   ['photography tips mobile', 'photo editing tutorial', 'portrait photography', 'Instagram photography'],
     'Comedy':        ['funny reels India', 'comedy videos viral', 'memes 2025', 'stand up comedy India'],
-    'Business':      ['startup ideas India', 'business tips entrepreneur', 'marketing strategy', 'passive income India'],
-    'Finance':       ['investing tips India', 'personal finance India', 'mutual funds guide', 'stock market India'],
-    'General':       ['viral trends India', 'Instagram reels trending', 'social media tips', 'content creation India'],
+    'Business':        ['startup ideas India', 'business tips entrepreneur', 'marketing strategy', 'passive income India'],
+    'Finance':         ['investing tips India', 'personal finance India', 'mutual funds guide', 'stock market India'],
+    'AI':              ['AI tools 2025', 'ChatGPT tips India', 'artificial intelligence trends', 'AI for creators', 'generative AI India'],
+    'Startups':        ['startup India 2025', 'startup funding India', 'startup ideas', 'entrepreneur India', 'new startup launch'],
+    'Creator Economy': ['creator economy India', 'influencer marketing 2025', 'content creator tips', 'monetize Instagram India', 'brand deals creators'],
+    'Education':       ['online learning India', 'study tips students', 'EdTech India', 'skill development 2025', 'career tips India'],
+    'Gaming':          ['gaming India 2025', 'mobile gaming trends', 'esports India', 'gaming setup India', 'gaming tips'],
+    'Music':           ['new Bollywood songs', 'music trends India', 'indie music India', 'music playlist 2025'],
+    'Comedy':          ['funny reels India', 'comedy videos viral', 'memes 2025', 'stand up comedy India'],
+    'Wellness':        ['mental health India', 'yoga wellness India', 'mindfulness 2025', 'self care routine', 'ayurveda tips'],
+    'Lifestyle':       ['morning routine productive', 'self care routine', 'daily vlog India', 'minimalism lifestyle', 'productivity tips'],
+    'Photography':     ['photography tips mobile', 'photo editing tutorial', 'portrait photography', 'Instagram photography'],
+    'Technology':      ['AI tools 2025', 'tech review India', 'smartphone tips', 'ChatGPT tips', 'app recommendations India'],
+    'General':         ['viral trends India', 'Instagram reels trending', 'social media tips', 'content creation India'],
 }
 
 

@@ -462,25 +462,7 @@ export default function ViralLab() {
                   ))}
                 </div>
 
-                {/* Predicted numbers */}
-                {scoreResult.predicted_views && (
-                  <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1.25rem", marginBottom: "16px" }}>
-                    <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "12px" }}>📊 Predicted Performance</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px" }}>
-                      {[
-                        { label: "Views",    value: scoreResult.predicted_views_str,    color: "var(--accent)" },
-                        { label: "Likes",    value: scoreResult.predicted_likes_str,    color: "var(--gold)"   },
-                        { label: "Shares",   value: scoreResult.predicted_shares_str,   color: "var(--blue)"   },
-                        { label: "Saves",    value: scoreResult.predicted_saves_str,    color: "var(--coral)"  },
-                      ].map(item => (
-                        <div key={item.label} style={{ textAlign: "center" }}>
-                          <div style={{ fontFamily: "var(--font-display)", fontSize: "22px", color: item.color, lineHeight: 1 }}>{item.value}</div>
-                          <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginTop: "3px" }}>{item.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+{/* Predicted performance removed from Score My Caption — shown in Generate Content flow instead */}
 
                 {/* Tone + data source */}
                 <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>

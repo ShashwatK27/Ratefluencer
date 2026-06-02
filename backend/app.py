@@ -1367,6 +1367,14 @@ def match_creators():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/campaigns", methods=["POST", "GET"])
+def campaigns_alias():
+    """Alias for /api/creator-match — frontend was calling /api/campaigns which returned 404."""
+    if request.method == "GET":
+        return jsonify({"campaigns": campaigns_store, "total": len(campaigns_store)}), 200
+    return creator_match()
+
+
 @app.route("/api/creator-match", methods=["POST"])
 def creator_match():
     """Match a creator profile against all live brand campaigns."""
@@ -1875,11 +1883,32 @@ def viral_predict():
 
 @app.route("/api/platform-insights")
 def platform_insights():
-    """Real Instagram performance insights by category."""
+    """Real Instagram performance insights by category.
+    Falls back to viral_insights_v1.pkl data when Instagram_Analytics.csv is missing."""
     try:
         ig_csv = BACKEND_DIR.parent / 'Instagram_Analytics.csv'
         if not ig_csv.exists():
-            return jsonify({"error": "Instagram_Analytics.csv not found on server. Please ensure the dataset is present."}), 503
+            # Graceful fallback: derive insights from viral_insights_v1.pkl
+            summary = viral_predictor.get_platform_summary()
+            cat_stats = []
+            for cat, stats in viral_predictor.insights.items():
+                cat_stats.append({
+                    'category': cat,
+                    'total_posts': stats.get('total_posts', 0),
+                    'viral_rate': round(stats.get('viral_rate', 0.25) * 100, 1),
+                    'avg_engagement_rate': round(stats.get('avg_er', 4.2), 2),
+                    'avg_hashtags': stats.get('optimal_hashtag_range', (6, 15))[0],
+                    'best_media': stats.get('best_media_type', 'reel'),
+                })
+            best_hours = summary.get('best_global_hour', 18)
+            return jsonify({
+                'category_stats': sorted(cat_stats, key=lambda x: x['viral_rate'], reverse=True),
+                'hourly_distribution': [{'hour': best_hours, 'count': 100}],
+                'daily_distribution':  [{'day': 'Wednesday', 'count': 100}],
+                'platform_summary':    summary,
+                'total_posts':         summary.get('total_posts_analysed', 29999),
+                'source':              'viral_insights_v1 (Instagram_Analytics.csv not available)',
+            }), 200
 
         df = pd.read_csv(ig_csv)
 
@@ -3205,41 +3234,6 @@ def generate_video():
         runway_key = os.environ.get("RUNWAYML_API_SECRET", "")
 
         # -- Runway ML path ---------------------------------------------------
-        # -- Kling AI path (66 free credits/day -- best free option) -----------
-        kling_key = os.environ.get("KLING_API_KEY", "")
-        if kling_key:
-            try:
-                prompt = f"{reel_idea or script[:300]} - {category} vertical mobile cinematic"
-                kling_headers = {
-                    "Authorization": f"Bearer {kling_key}",
-                    "Content-Type":  "application/json",
-                }
-                kling_payload = {
-                    "model":        "kling-v1",
-                    "prompt":       prompt,
-                    "duration":     "5",
-                    "aspect_ratio": "9:16",
-                    "mode":         "std",
-                }
-                kr = http_requests.post(
-                    "https://api.klingai.com/v1/videos/text2video",
-                    json=kling_payload, headers=kling_headers, timeout=30,
-                )
-                if kr.status_code in (200, 201):
-                    kdata = kr.json()
-                    task_id = kdata.get("data", {}).get("task_id") or kdata.get("task_id", "")
-                    return jsonify({
-                        "status":   "generating",
-                        "task_id":  task_id,
-                        "poll_url": f"https://api.klingai.com/v1/videos/text2video/{task_id}",
-                        "message":  "Video generating on Kling AI (5 seconds, 9:16 vertical).",
-                        "provider": "Kling AI (Free 66 credits/day)",
-                    }), 202
-                else:
-                    logger.warning(f"Kling API returned {kr.status_code}: {kr.text[:200]}")
-            except Exception as ke:
-                logger.warning(f"Kling API failed: {ke}")
-
         # -- Runway ML path ---------------------------------------------------
         if runway_key:
             try:
