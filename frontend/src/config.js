@@ -40,6 +40,9 @@ export const config = {
       agentLearn:        `${API_URL}/api/agent/learn`,
       agentPreferences:  `${API_URL}/api/agent/preferences`,
       generateVideo:     `${API_URL}/api/generate-video`,
+      detectAnomalies:   `${API_URL}/api/detect-anomalies`,
+      postingFrequency:  `${API_URL}/api/posting-frequency`,
+      generateStoryboard:`${API_URL}/api/generate-video`,
     }
   },
   app: {

@@ -108,7 +108,9 @@ export default function Dashboard() {
   const [searchQuery,    setSearchQuery]    = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [allCreators,    setAllCreators]    = useState([]);
+  const [searchResults,  setSearchResults]  = useState(null);  // server-side search results
   const [loading,        setLoading]        = useState(true);
+  const [searchLoading,  setSearchLoading]  = useState(false);
   const [isReal,         setIsReal]         = useState(false);
   const [page,           setPage]           = useState(0);
 
@@ -138,7 +140,35 @@ export default function Dashboard() {
     load().finally(() => setLoading(false));
   }, []);
 
+  // Server-side search: fires when query changes (searches all 33K creators, not just top 100)
+  useEffect(() => {
+    if (!searchQuery.trim() && activeCategory === 'All') {
+      setSearchResults(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const params = new URLSearchParams({ limit: 50, sort_by: 'engagement_rate' });
+        if (searchQuery.trim()) params.set('q', searchQuery.trim());
+        if (activeCategory !== 'All') params.set('niche', activeCategory.toLowerCase());
+        const res = await fetch(`${config.api.endpoints.search}?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.results || []);
+        }
+      } catch { setSearchResults(null); }
+      finally { setSearchLoading(false); }
+    }, 350);   // debounce 350ms
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeCategory]);
+
+  // Use server-side results when search/filter is active (searches full 33K dataset)
+  // Fall back to client-side filtering of top-100 when idle
   const filtered = useMemo(() => {
+    if (searchResults !== null) {
+      return searchResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+    }
     const q   = searchQuery.toLowerCase();
     const cat = activeCategory.toLowerCase();
     return allCreators
@@ -151,8 +181,8 @@ export default function Dashboard() {
           (inf.cat || '').toLowerCase().includes(cat);
         return matchSearch && matchCat;
       })
-      .sort((a, b) => (b.score || 0) - (a.score || 0));  // best Ratefluencer score first
-  }, [allCreators, searchQuery, activeCategory]);
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+  }, [allCreators, searchResults, searchQuery, activeCategory]);
 
   // Reset to page 0 when filters change
   useEffect(() => { setPage(0); }, [searchQuery, activeCategory]);
@@ -264,7 +294,7 @@ export default function Dashboard() {
         )}
 
         {/* Table */}
-        {loading ? (
+        {loading || searchLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[...Array(8)].map((_, i) => (
               <div key={i} className="skeleton" style={{ height: '58px', borderRadius: 'var(--radius-sm)', opacity: 1 - i * 0.1 }} />

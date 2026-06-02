@@ -296,14 +296,42 @@ export default function ViralLab() {
       setScoreLoading(true);
       setScoreError(null);
       setScoreResult(null);
-      const response = await axios.post(config.api.endpoints.scoreCaption, {
-        caption, hashtags,
-        media_type: mediaType,
-        content_category: scoreCategory,
-        post_hour: postHour,
-        day_of_week: dayOfWeek,
+
+      const hashtagCount = hashtags.trim() ? hashtags.trim().split(/\s+/).length : 0;
+      const hasCta = /click|link|bio|comment|share|follow|save|dm|buy|shop|visit|tag|swipe|watch/i.test(caption);
+
+      // Run both endpoints in parallel: caption analysis + ML viral predictor
+      const [captionRes, viralRes] = await Promise.allSettled([
+        axios.post(config.api.endpoints.scoreCaption, {
+          caption, hashtags,
+          media_type: mediaType,
+          content_category: scoreCategory,
+          post_hour: postHour,
+          day_of_week: dayOfWeek,
+        }),
+        axios.post(config.api.endpoints.viralPredict, {
+          content_category: scoreCategory,
+          hashtags_count:   hashtagCount,
+          has_call_to_action: hasCta ? 1 : 0,
+          post_hour:        postHour,
+          day_of_week:      dayOfWeek,
+          media_type:       mediaType,
+        }),
+      ]);
+
+      const captionData = captionRes.status === 'fulfilled' ? captionRes.value.data : {};
+      const viralData   = viralRes.status === 'fulfilled'   ? viralRes.value.data   : {};
+
+      // Merge: scoreCaption data + viral model classifier result
+      setScoreResult({
+        ...captionData,
+        ml_viral_score:   viralData.viral_score,
+        ml_bucket:        viralData.predicted_bucket,
+        ml_classifier:    viralData.classifier_used,
+        ml_best_hours:    viralData.best_hours,
+        ml_best_days:     viralData.best_days,
+        ml_hashtag_range: viralData.optimal_hashtag_range,
       });
-      setScoreResult(response.data);
     } catch (err) {
       console.error(err);
       setScoreError("Scoring failed. Please check the backend is running.");
@@ -464,10 +492,26 @@ export default function ViralLab() {
 
 {/* Predicted performance removed from Score My Caption — shown in Generate Content flow instead */}
 
-                {/* Tone + data source */}
+                {/* ML Viral Model Score + Tone + data source */}
+                {scoreResult.ml_viral_score !== undefined && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.15)", borderRadius: "var(--radius-sm)", marginBottom: "10px" }}>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: "26px", color: scoreResult.ml_viral_score >= 70 ? "var(--accent)" : scoreResult.ml_viral_score >= 50 ? "var(--gold)" : "var(--coral)", lineHeight: 1 }}>
+                      {scoreResult.ml_viral_score}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                        ML Viral Classifier {scoreResult.ml_classifier ? "(GradientBoosting)" : "(heuristic)"}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "var(--text2)", marginTop: "2px" }}>
+                        Predicted: <strong style={{ color: "var(--accent)" }}>{(scoreResult.ml_bucket || "").toUpperCase()}</strong>
+                        {scoreResult.ml_best_hours?.length > 0 && <span style={{ marginLeft: "8px", color: "var(--text3)" }}>Best time: {scoreResult.ml_best_hours[0]}:00 on {scoreResult.ml_best_days?.[0]}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
                   {scoreResult.tone && <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "rgba(176,104,240,0.08)", color: "var(--purple)", border: "1px solid rgba(176,104,240,0.2)", fontFamily: "var(--font-mono)" }}>Tone: {scoreResult.tone}</span>}
-                  {scoreResult.predicted_bucket && <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "rgba(200,240,104,0.08)", color: "var(--accent)", border: "1px solid rgba(200,240,104,0.15)", fontFamily: "var(--font-mono)" }}>Predicted: {scoreResult.predicted_bucket.toUpperCase()}</span>}
+                  {scoreResult.predicted_bucket && <span style={{ fontSize: "12px", padding: "4px 12px", borderRadius: "20px", background: "rgba(200,240,104,0.08)", color: "var(--accent)", border: "1px solid rgba(200,240,104,0.15)", fontFamily: "var(--font-mono)" }}>Heuristic: {scoreResult.predicted_bucket.toUpperCase()}</span>}
                   <span style={{ fontSize: "12px", color: "var(--text3)", display: "flex", alignItems: "center" }}>📊 {scoreResult.data_source}</span>
                 </div>
 

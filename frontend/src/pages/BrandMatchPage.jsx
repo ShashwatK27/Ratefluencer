@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { config } from "../config.js";
 
 const GOAL_WEIGHTS = [
   {
@@ -32,7 +33,30 @@ const GOAL_WEIGHTS = [
 ];
 
 export default function BrandMatchPage() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const [demo,    setDemo]    = useState({ text: '', goal: 'Brand Awareness', category: 'Beauty' });
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const runDemo = async () => {
+    if (!demo.text.trim()) return;
+    setLoading(true); setResults(null);
+    try {
+      const r = await fetch(config.api.endpoints.match, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaign_text: demo.text,
+          campaign_goal: demo.goal,
+          category_filters: [demo.category],
+          top_k: 3,
+        }),
+      });
+      const d = await r.json();
+      setResults(d.recommendations || []);
+    } catch { setResults([]); }
+    finally { setLoading(false); }
+  };
+
   return (
     <div style={{ paddingTop: "56px" }}>
       <div style={{ minHeight: "calc(100vh - 56px)" }}>
@@ -150,6 +174,59 @@ export default function BrandMatchPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Live Demo */}
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 'var(--radius)', padding: '1.75rem', marginBottom: '1.5rem' }}>
+              <div className="section-label" style={{ marginBottom: '12px' }}>Live Demo — Try It Now</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
+                <textarea
+                  placeholder="Describe your campaign... e.g. 'organic skincare glow serum for Indian women aged 25-34'"
+                  value={demo.text}
+                  onChange={e => setDemo(d => ({ ...d, text: e.target.value }))}
+                  rows={2}
+                  style={{ fontSize: '13px', resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select value={demo.goal} onChange={e => setDemo(d => ({ ...d, goal: e.target.value }))} style={{ fontSize: '13px', flex: 1 }}>
+                    {['Brand Awareness', 'Sales / Conversions', 'Niche Targeting', 'Community Growth'].map(g => <option key={g}>{g}</option>)}
+                  </select>
+                  <select value={demo.category} onChange={e => setDemo(d => ({ ...d, category: e.target.value }))} style={{ fontSize: '13px', flex: 1 }}>
+                    {['Beauty', 'Fitness', 'Fashion', 'Food', 'Travel', 'Technology', 'Finance', 'Gaming'].map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  <button className="btn btn-primary btn-sm" onClick={runDemo} disabled={loading || !demo.text.trim()} style={{ flexShrink: 0 }}>
+                    {loading ? 'Matching...' : 'Find Creators'}
+                  </button>
+                </div>
+              </div>
+              {results && results.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {results.map((rec, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 500 }}>{rec.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '2px' }}>{rec.meta}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
+                        {[
+                          { l: 'BM', v: rec.brandMatch, c: 'var(--accent)' },
+                          { l: 'Auth', v: rec.authenticity, c: 'var(--blue)' },
+                          { l: 'RF', v: rec.ratefluencer, c: 'var(--gold)' },
+                        ].map(s => (
+                          <div key={s.l} style={{ textAlign: 'center' }}>
+                            <div style={{ color: s.c, fontFamily: 'var(--font-display)', fontSize: '16px' }}>{s.v}</div>
+                            <div style={{ color: 'var(--text3)', fontSize: '9px', textTransform: 'uppercase' }}>{s.l}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: '11px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                    Matched via ChromaDB semantic search + TF-IDF cross-niche scoring
+                  </div>
+                </div>
+              )}
+              {results && results.length === 0 && <div style={{ fontSize: '13px', color: 'var(--text3)' }}>No matches found — try different campaign text.</div>}
             </div>
 
           </div>
