@@ -264,19 +264,24 @@ _NICHE_EXPANSION = {
     'food':          'food recipe cooking vegan restaurant meal healthy diet cuisine chef culinary baking nutrition snack',
     'fashion':       'fashion style clothing outfit apparel trend wardrobe accessories streetwear luxury designer couture',
     'tech':          'technology gadget smartphone app software device review unboxing innovation startup ai digital product',
+    'technology':    'technology gadget smartphone app software device review unboxing innovation startup ai digital product',  # alias for 'tech'
     'travel':        'travel adventure tourism destination hotel photography explore journey road trip backpacking wanderlust holiday',
     'gaming':        'gaming game esports streaming console PC online multiplayer tournament twitch youtube gameplay',
     'finance':       'finance investing money banking crypto stock market personal finance wealth savings budget fintech',
     'education':     'education learning course tutorial student university skill development career knowledge online training',
     'entertainment': 'entertainment music movie comedy show celebrity pop culture media viral trending celebrity',
-    'sports':        'sports cricket football football basketball athletics running cycling swimming team competition league',
-    'music':         'music song artist band album playlist rap hip-hop pop indie indie acoustic performance concert',
+    'sports':        'sports cricket football basketball athletics running cycling swimming team competition league',
+    'music':         'music song artist band album playlist rap hip-hop pop indie acoustic performance concert',
     'comedy':        'comedy funny jokes memes satire stand-up humor entertainment viral sketch parody',
     'lifestyle':     'lifestyle daily routine morning evening home decor family relationships productivity vlog',
     'photography':   'photography camera portrait nature landscape lighting editing DSLR iPhone content creation visual',
     'pets':          'pets dogs cats animals veterinary grooming training adoption rescue pet care',
+    'pet':           'pets dogs cats animals veterinary grooming training adoption rescue pet care',  # alias for 'pets'
+    'interior':      'interior design home decor room makeover furniture aesthetic DIY living room bedroom renovation',
+    'family':        'family parenting kids children baby toddler pregnancy mom dad activities education school',
     'diy':           'diy craft handmade tutorial home improvement woodwork upcycle recycle art project make',
     'business':      'business entrepreneur startup marketing branding strategy leadership management sales B2B',
+    'other':         'lifestyle content creator India social media digital influencer engagement community reels',
 }
 
 _tfidf_vectorizer = None
@@ -708,52 +713,57 @@ def live_brand_match(row, campaign_text, category_filters):
 
 
 def semantic_brand_match(row, campaign_text, category_filters):
-    """TF-IDF / RAG semantic brand match with keyword fallback."""
-    # 1. Try BrandMatcher RAG
-    if engine.brand_matcher is not None:
-        try:
-            niche = str(row.get('niche', '')).lower()
-            selected = {str(cat).lower() for cat in category_filters or []}
-            result = engine.brand_matcher.match(
-                brand_campaign=campaign_text,
-                top_k=1,
-                category_filters=list(selected) if selected else None,
-                min_confidence=0.0,
-            )
-            matches = result.get('top_matches', [])
-            if matches:
-                # Scale cosine similarity to 0-100 range with category bonus
-                base = float(matches[0].get('similarity_score', 0)) * 100
-                if niche in selected:
-                    base = min(100, base + 30)
-                return round(clamp(base), 2)
-        except Exception:
-            pass  # fall through to TF-IDF
+    """
+    Per-creator brand match score using TF-IDF cosine similarity.
 
-    # 2. TF-IDF cosine similarity
-    niche = str(row.get('niche', '')).lower()
-    cache_key = (campaign_text, niche)
+    NOTE: ChromaDB brand_matcher.match() is NOT used here because it returns
+    the similarity of the best overall match, not this specific creator —
+    causing all creators to receive the same score.
+    TF-IDF correctly scores each creator's niche against the campaign text.
+    """
+    niche    = str(row.get('niche', '')).lower()
+    selected = {str(cat).lower() for cat in category_filters or []}
+
+    # Cache key MUST include category_filters so category bonus is applied correctly
+    cache_key = (campaign_text, niche, frozenset(selected))
     if cache_key in _bm_score_cache:
         return _bm_score_cache[cache_key]
 
+    # TF-IDF cosine similarity between campaign text and creator's niche vocabulary
     if _tfidf_vectorizer and niche in _tfidf_niche_vecs:
         try:
             campaign_vec = _tfidf_vectorizer.transform([campaign_text])
-            sim = float(cosine_similarity(campaign_vec, _tfidf_niche_vecs[niche])[0][0])
+            sim   = float(cosine_similarity(campaign_vec, _tfidf_niche_vecs[niche])[0][0])
             score = sim * 100
-            selected = {str(cat).lower() for cat in category_filters or []}
+
+            # Category bonus: niche exactly matches campaign filter → strong boost
             if niche in selected:
-                score = min(100, score + 50)
+                score = min(100, score + 55)
+            # Partial match: niche mentioned in campaign text
             elif niche and niche in (campaign_text or '').lower():
-                score = min(100, score + 33)
+                score = min(100, score + 35)
+            # Cross-niche semantic bonus: some campaigns span niches (e.g. beauty+wellness)
+            elif selected:
+                # Check if any selected category's vocabulary overlaps with this niche
+                for sel in selected:
+                    if sel in _tfidf_niche_vecs:
+                        cross_vec = _tfidf_niche_vecs[sel]
+                        niche_vec = _tfidf_niche_vecs[niche]
+                        cross_sim = float(cosine_similarity(niche_vec, cross_vec)[0][0])
+                        if cross_sim > 0.3:   # niches are semantically related
+                            score = min(100, score + cross_sim * 30)
+                            break
+
             result = round(clamp(score), 2)
             _bm_score_cache[cache_key] = result
             return result
         except Exception:
             pass
 
-    # 3. Keyword fallback
-    return live_brand_match(row, campaign_text, category_filters)
+    # Keyword fallback (no TF-IDF match for this niche)
+    result = live_brand_match(row, campaign_text, category_filters)
+    _bm_score_cache[cache_key] = result
+    return result
 
 
 def detect_engagement_anomalies(row: dict) -> dict:
