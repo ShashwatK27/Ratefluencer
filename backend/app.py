@@ -1071,7 +1071,7 @@ def csv_recommendations(category_filters=None, min_auth_val=0, tier_min=0, tier_
         category_df = df[df['niche'].str.lower().isin(wanted)]
         if not category_df.empty:
             df = category_df
-            logger.info(f"Category filter {category_filters} → niches {mapped_niches}: {len(df)} creators")
+            logger.info(f"Category filter {category_filters} → niches {wanted}: {len(df)} creators")
 
     filtered = df[
         (df['followers'] >= tier_min) &
@@ -1902,8 +1902,8 @@ Return ONLY JSON: {{"trend": "<topic>", "source": "<platform>", "growth_signal":
             best_row = best_pair[0]
             best_row['_scores'] = best_pair[1]
 
-        if best_row is None and not cat_df.empty:
-            best_row = cat_df.iloc[0].to_dict()
+        if best_row is None and not candidate_pool.empty:
+            best_row = candidate_pool.iloc[0].to_dict()
             best_row['_scores'] = generated_scores(best_row, goal, [detected_category], 'balanced')
 
         influencer_name, _ = creator_identity(best_row) if best_row else ("Ananya Sharma", "@ananya_sharma")
@@ -2022,8 +2022,6 @@ Return ONLY JSON (no other text):
 
             # Adjust score with content-quality signals not in the base model
             v_score = min(99, max(20, viral_res['viral_score'] + trend_bonus + (has_hook * 3) - max(0, caption_len - 60) // 10))
-
-            v_score = viral_res['viral_score']
             bucket  = viral_res['predicted_bucket']
 
             content_attempts.append({
