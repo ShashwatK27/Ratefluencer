@@ -1,15 +1,34 @@
-# ── Sensitive / secrets ───────────────────────────────────────────────────────
+# ── Sensitive / secrets ──────────────────────────────────────────────
 api_key.txt
 *.key
 .env
 .env.local
 backend/.env
+
+# ── Runtime / generated data (not source code) ───────────────────────
 backend/feedback_store.json
+backend/learned_preferences.json
 backend/chroma_db/
 backend/top_creators_temp.csv
+backend/youtube_quota_tracker.json
 
-# ── Large model artifacts (tracked separately or regenerated) ─────────────────
-backend/*.pkl
+# ── Virtual environments ──────────────────────────────────────────────
+venv/
+backend/venv/
+.venv/
+
+# ── Node / build ──────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+
+# ── Temp / cache ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.dist/
+
+# ── Large model artifacts (committed separately via git lfs or direct) ──
+# backend/*.pkl   ← PKLs are committed since they're needed to run the app
 
 # ── Created by https://www.toptal.com/developers/gitignore/api/python ─────────
 
