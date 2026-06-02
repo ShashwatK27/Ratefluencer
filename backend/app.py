@@ -288,6 +288,66 @@ _tfidf_vectorizer = None
 _tfidf_niche_vecs = {}
 _bm_score_cache = {}
 
+# Cross-niche brand match scores (0-100).
+# When a creator's niche != campaign filter, use these instead of 0%.
+# Based on real-world audience overlap between content categories.
+# E.g. fashion creators reach beauty audiences (GRWM content, style+skincare);
+# gaming creators are the primary tech gadget review audience.
+_CROSS_NICHE_SCORES = {
+    # Beauty ↔ related
+    ('beauty',  'wellness'):     60,
+    ('beauty',  'fashion'):      45,
+    ('beauty',  'lifestyle'):    40,
+    ('beauty',  'fitness'):      25,
+    # Fashion ↔ related
+    ('fashion', 'lifestyle'):    50,
+    ('fashion', 'beauty'):       45,
+    ('fashion', 'entertainment'):30,
+    # Gaming ↔ Technology (very high overlap — same audience)
+    ('gaming',  'technology'):   70,
+    ('technology','gaming'):     70,
+    ('gaming',  'entertainment'):35,
+    # Fitness ↔ related
+    ('fitness', 'wellness'):     65,
+    ('fitness', 'lifestyle'):    40,
+    ('fitness', 'food'):         30,
+    # Wellness ↔ related
+    ('wellness','fitness'):      65,
+    ('wellness','beauty'):       60,
+    ('wellness','lifestyle'):    50,
+    ('wellness','food'):         35,
+    # Lifestyle ↔ related (lifestyle overlaps with almost everything)
+    ('lifestyle','fashion'):     50,
+    ('lifestyle','food'):        45,
+    ('lifestyle','travel'):      45,
+    ('lifestyle','wellness'):    50,
+    ('lifestyle','fitness'):     40,
+    # Food ↔ related
+    ('food',    'lifestyle'):    45,
+    ('food',    'wellness'):     35,
+    ('food',    'travel'):       30,
+    # Travel ↔ related
+    ('travel',  'lifestyle'):    45,
+    ('travel',  'photography'):  50,
+    ('travel',  'food'):         30,
+    # Entertainment ↔ related
+    ('entertainment','comedy'):  55,
+    ('entertainment','music'):   50,
+    ('entertainment','gaming'):  35,
+    # Finance ↔ related
+    ('finance', 'business'):     60,
+    ('finance', 'education'):    40,
+    ('finance', 'technology'):   30,
+    # Business ↔ related
+    ('business','finance'):      60,
+    ('business','education'):    45,
+    ('business','technology'):   35,
+    # Education ↔ related
+    ('education','business'):    45,
+    ('education','technology'):  40,
+    ('education','finance'):     40,
+}
+
 
 def _init_tfidf():
     global _tfidf_vectorizer, _tfidf_niche_vecs
@@ -742,17 +802,17 @@ def semantic_brand_match(row, campaign_text, category_filters):
             # Partial match: niche mentioned in campaign text
             elif niche and niche in (campaign_text or '').lower():
                 score = min(100, score + 35)
-            # Cross-niche semantic bonus: some campaigns span niches (e.g. beauty+wellness)
+            # Cross-niche bonus: use explicit audience-overlap scores
+            # (e.g. gaming creator for tech campaign, fashion creator for beauty)
             elif selected:
-                # Check if any selected category's vocabulary overlaps with this niche
+                best_cross = 0
                 for sel in selected:
-                    if sel in _tfidf_niche_vecs:
-                        cross_vec = _tfidf_niche_vecs[sel]
-                        niche_vec = _tfidf_niche_vecs[niche]
-                        cross_sim = float(cosine_similarity(niche_vec, cross_vec)[0][0])
-                        if cross_sim > 0.3:   # niches are semantically related
-                            score = min(100, score + cross_sim * 30)
-                            break
+                    cross = _CROSS_NICHE_SCORES.get((niche, sel), 0)
+                    if cross > best_cross:
+                        best_cross = cross
+                if best_cross > 0:
+                    # Scale: cross-niche bonus is added to TF-IDF base score
+                    score = min(100, score + best_cross)
 
             result = round(clamp(score), 2)
             _bm_score_cache[cache_key] = result
