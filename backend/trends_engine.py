@@ -3,53 +3,11 @@ Trend Engine  -  real-time trend signals from Google Trends + Reddit + YouTube.
 Falls back gracefully on rate limits or network errors.
 """
 import os
-import re
 import math
 import time
 import logging
 import requests as _requests
 from typing import List, Dict
-
-
-def _clean_yt_title_to_trend(title: str, category: str = '') -> str:
-    """
-    Convert a raw YouTube video title into a short creator-relevant trend concept.
-    Works offline — no LLM needed.
-
-    Examples:
-      "10 Best Toners for Mature Skin to Buy in 2024" → "Best Toners for Mature Skin"
-      "GRWM: Glass Skin Routine ft. 3 Products | Skincare" → "Glass Skin Routine"
-      "I Used Only Korean Skincare for 30 Days *shocking*" → "Korean Skincare Challenge"
-    """
-    t = title.strip()
-
-    # Remove clickbait suffixes / channel branding after |, #, or *
-    t = re.split(r'\s*[\|#\*]+\s*', t)[0].strip()
-
-    # Remove year references (2024, 2025, 2026)
-    t = re.sub(r'\b20\d{2}\b', '', t).strip()
-
-    # Remove leading list numbers: "10 Best..." → "Best..."
-    t = re.sub(r'^\d+\s+', '', t).strip()
-
-    # Remove emoji
-    t = re.sub(r'[^\x00-\x7F]+', '', t).strip()
-
-    # Remove "ft." / "feat." mentions
-    t = re.sub(r'\bft\.?\b.*', '', t, flags=re.IGNORECASE).strip()
-
-    # Remove "I tried/tested/used X for N days" → extract the subject
-    m = re.search(r'(?:tried|tested|used|wore|ate|did)\s+(?:only\s+)?(.+?)(?:\s+for\s+\d+\s+days?|\s+for\s+a\s+month|$)', t, re.IGNORECASE)
-    if m:
-        t = m.group(1).strip()
-
-    # Remove trailing punctuation and filler words
-    t = re.sub(r'[\?\!\:\,\.]+$', '', t).strip()
-    t = re.sub(r'\s+(review|tutorial|routine|challenge|vlog|haul)$', r' \1', t, flags=re.IGNORECASE)
-
-    # Capitalise first letter, limit length
-    t = t[:70].strip()
-    return t[0].upper() + t[1:] if t else title[:60]
 
 # ── urllib3 2.x compatibility patch for pytrends ──────────────────────────────
 # pytrends uses Retry(method_whitelist=...) which was renamed to allowed_methods
@@ -93,6 +51,8 @@ def _load_trend_model():
         except Exception as e:
             logger.debug(f"Trend model load failed: {e}")
 
+_load_trend_model()
+
 def ml_trend_score(views_7d: float, likes_7d: float, er: float,
                    growth: float, day_of_week: int) -> int:
     """
@@ -121,7 +81,6 @@ def ml_trend_score(views_7d: float, likes_7d: float, er: float,
 _yt_search_cache: Dict[str, dict] = {}   # key -> {'ts': float, 'results': List[Dict]}
 
 logger = logging.getLogger(__name__)
-_load_trend_model()
 
 CATEGORY_SUBREDDITS: Dict[str, List[str]] = {
     'Fashion':     ['fashion', 'streetwear', 'femalefashionadvice', 'malefashionadvice'],
@@ -310,7 +269,7 @@ def fetch_reddit_trends(category: str) -> List[Dict]:
                 seen_topics.add(key)
 
                 results.append({
-                    'topic':            _clean_yt_title_to_trend(title),
+                    'topic':            title[:80],
                     'keyword':          title[:40],
                     'trend_score':      trend_sc,
                     'growth_velocity':  velocity,
@@ -428,11 +387,9 @@ def fetch_youtube_search_trends(category: str, geo: str = 'IN') -> List[Dict]:
             engagement  = min(100, int(eng_rate * 2000))
             trend_score = min(100, int(velocity * 0.45 + engagement * 0.30 + 80 * 0.25))
 
-            trend_topic = _clean_yt_title_to_trend(title, category)
             results.append({
-                'topic':            trend_topic,
-                'keyword':          trend_topic[:40],
-                'raw_title':        title[:80],
+                'topic':            title[:80],
+                'keyword':          title[:40],
                 'channel':          channel,
                 'trend_score':      trend_score,
                 'growth_velocity':  velocity,
@@ -441,7 +398,7 @@ def fetch_youtube_search_trends(category: str, geo: str = 'IN') -> List[Dict]:
                 'current_interest': min(100, int(views / 100_000)),
                 'audience_fit':     min(100, 60 + trend_score // 4),
                 'source':           'YouTube Search (Data API)',
-                'why_trending':     f"{views/1_000_000:.1f}M views · {likes/1000:.0f}K likes · \"{title[:40]}...\"",
+                'why_trending':     f"{views/1_000_000:.1f}M views . {likes/1000:.0f}K likes on YouTube India",
                 'data_backed':      True,
                 'real_time':        True,
             })
@@ -608,7 +565,7 @@ def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
                 trend_score = min(100, int(velocity * 0.45 + engagement * 0.30 + novelty * 0.25))
 
                 results.append({
-                    'topic':            _clean_yt_title_to_trend(title),
+                    'topic':            title[:80],
                     'keyword':          title[:40],
                     'channel':          channel,
                     'trend_score':      trend_score,
@@ -660,7 +617,7 @@ def fetch_youtube_trends(category: str, geo: str = 'IN') -> List[Dict]:
 
             trend_score = 75 + (len(results) == 0) * 10
             results.append({
-                'topic':            _clean_yt_title_to_trend(title),
+                'topic':            title[:80],
                 'keyword':          title[:40],
                 'trend_score':      trend_score,
                 'growth_velocity':  70,
@@ -692,33 +649,24 @@ def fetch_news_trends(category: str) -> List[Dict]:
     from datetime import datetime, timezone
 
     RSS_SOURCES: Dict[str, List[str]] = {
-        'General':          ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
-        'Technology':       ['https://feeds.feedburner.com/TechCrunch', 'https://news.ycombinator.com/rss'],
-        'AI':               ['https://feeds.feedburner.com/TechCrunch', 'https://news.ycombinator.com/rss'],
-        'Business':         ['https://economictimes.indiatimes.com/rssfeedstopstories.cms', 'https://feeds.feedburner.com/entrepreneur/latest'],
-        'Startups':         ['https://feeds.feedburner.com/TechCrunch', 'https://feeds.feedburner.com/entrepreneur/latest'],
-        'Finance':          ['https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms'],
-        'Creator Economy':  ['https://feeds.feedburner.com/entrepreneur/latest', 'https://feeds.feedburner.com/TechCrunch'],
-        'Fashion':          ['https://www.vogue.in/feed/'],
-        'Beauty':           ['https://www.allure.com/feed/rss'],
-        'Fitness':          ['https://www.menshealth.com/rss/all.xml/', 'https://www.womenshealthmag.com/rss/all.xml/'],
-        'Food':             ['https://www.bonappetit.com/feed/rss', 'https://food52.com/blog/feed'],
-        'Travel':           ['https://www.lonelyplanet.com/news/feed', 'https://www.cntraveler.com/feed/rss'],
-        'Music':            ['https://pitchfork.com/rss/news/'],
-        'Gaming':           ['https://www.pcgamer.com/rss/'],
-        'Photography':      ['https://petapixel.com/feed/'],
-        'Comedy':           ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
-        'Interior':         ['https://www.architecturaldigest.com/feed/rss'],
-        'Pet':              ['https://www.akc.org/rss/'],
-        'Lifestyle':        ['https://www.refinery29.com/en-us/rss.xml'],
-        'Education':        ['https://feeds.feedburner.com/TechCrunch'],
+        'General':      ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
+        'Technology':   ['https://feeds.feedburner.com/TechCrunch', 'https://news.ycombinator.com/rss'],
+        'Business':     ['https://economictimes.indiatimes.com/rssfeedstopstories.cms'],
+        'Finance':      ['https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms'],
+        'Fashion':      ['https://www.vogue.in/feed/'],
+        'Beauty':       ['https://www.allure.com/feed/rss'],
+        'Fitness':      ['https://www.menshealth.com/rss/all.xml/', 'https://www.womenshealthmag.com/rss/all.xml/'],
+        'Food':         ['https://www.bonappetit.com/feed/rss', 'https://food52.com/blog/feed'],
+        'Travel':       ['https://www.lonelyplanet.com/news/feed', 'https://www.cntraveler.com/feed/rss'],
+        'Music':        ['https://pitchfork.com/rss/news/'],
+        'Gaming':       ['https://www.pcgamer.com/rss/'],
+        'Photography':  ['https://petapixel.com/feed/'],
+        'Comedy':       ['https://timesofindia.indiatimes.com/rssfeedmostread.cms'],
+        'Interior':     ['https://www.architecturaldigest.com/feed/rss'],
+        'Pet':          ['https://www.akc.org/rss/'],
+        'Lifestyle':    ['https://www.refinery29.com/en-us/rss.xml'],
+        'Education':    ['https://feeds.feedburner.com/TechCrunch'],
     }
-
-    # LinkedIn trending content via their public news RSS (no auth needed)
-    LINKEDIN_FEEDS = [
-        'https://www.linkedin.com/pulse/rss/?type=article',
-        'https://engineering.linkedin.com/blog/rss',
-    ]
 
     feeds = RSS_SOURCES.get(category, RSS_SOURCES['General'])
     headers = {'User-Agent': 'ratefluencer-trends/1.0', 'Accept': 'application/rss+xml, application/xml'}
@@ -744,7 +692,7 @@ def fetch_news_trends(category: str) -> List[Dict]:
                 recency_score = max(0, 90 - rank * 8)   # top item = 90, drops off
 
                 results.append({
-                    'topic':            _clean_yt_title_to_trend(title),
+                    'topic':            title[:80],
                     'keyword':          title[:40],
                     'trend_score':      recency_score,
                     'growth_velocity':  recency_score,
@@ -816,7 +764,7 @@ def fetch_linkedin_trends(category: str) -> List[Dict]:
                 rank = items.index(item)
                 trend_score = max(55, 88 - rank * 7)
                 results.append({
-                    'topic':            _clean_yt_title_to_trend(title),
+                    'topic':            title[:80],
                     'keyword':          title[:40],
                     'trend_score':      trend_score,
                     'growth_velocity':  trend_score - 10,

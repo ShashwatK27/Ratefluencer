@@ -20,7 +20,7 @@ export default function PreferencesPage() {
 
         <main style={{ padding: "2rem", overflowY: "auto" }}>
           <button onClick={() => navigate("/")} className="btn btn-ghost btn-sm" style={{ fontSize: "13px", marginBottom: "1.5rem" }}>← Home</button>
-          <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+          <div style={{ maxWidth: "600px" }}>
 
             <div style={{ marginBottom: "2rem" }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "28px", marginBottom: "4px" }}>

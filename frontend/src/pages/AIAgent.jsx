@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
@@ -54,158 +54,226 @@ function FeedbackBar({ result }) {
   );
 }
 
+// One-click "open video generator" launchers
+// Copies the AI-generated prompt to clipboard then opens the service in a new tab.
+// The user just lands on the page and hits Ctrl+V — no manual copy needed.
+const VIDEO_SERVICES = [
+  {
+    id:    'runway',
+    label: 'Runway Gen-3',
+    url:   'https://app.runwayml.com/video-tools/teams',
+    hint:  'Paste prompt -> Generate',
+    color: 'var(--accent)',
+    bg:    'rgba(200,240,104,0.08)',
+    border:'rgba(200,240,104,0.25)',
+    free:  false,
+    note:  'Needs credits',
+  },
+  {
+    id:    'kling',
+    label: 'Kling AI',
+    url:   'https://klingai.com/text-to-video/new',
+    hint:  'Paste prompt -> Generate',
+    color: 'var(--blue)',
+    bg:    'rgba(104,184,240,0.08)',
+    border:'rgba(104,184,240,0.25)',
+    free:  true,
+    note:  '66 free credits/day',
+  },
+  {
+    id:    'luma',
+    label: 'Luma Dream Machine',
+    url:   'https://lumalabs.ai/dream-machine',
+    hint:  'Paste prompt -> Generate',
+    color: 'var(--purple)',
+    bg:    'rgba(176,104,240,0.08)',
+    border:'rgba(176,104,240,0.25)',
+    free:  true,
+    note:  '30 free/month',
+  },
+  {
+    id:    'pika',
+    label: 'Pika Labs',
+    url:   'https://pika.art/create',
+    hint:  'Paste prompt -> Generate',
+    color: 'var(--coral)',
+    bg:    'rgba(240,120,104,0.08)',
+    border:'rgba(240,120,104,0.25)',
+    free:  true,
+    note:  'Free tier',
+  },
+  {
+    id:    'veo',
+    label: 'Google VideoFX',
+    url:   'https://aitestkitchen.withgoogle.com/tools/video-fx',
+    hint:  'Paste prompt -> Generate',
+    color: 'var(--gold)',
+    bg:    'rgba(240,200,104,0.08)',
+    border:'rgba(240,200,104,0.25)',
+    free:  true,
+    note:  'Veo 2 - free',
+  },
+];
 
-function VideoGeneratorCard({ result }) {
-  const [storyboard,       setStoryboard]       = useState(null);
-  const [storyboardLoading,setStoryboardLoading]= useState(false);
-  const [selectedScenes,   setSelectedScenes]   = useState(new Set());
-  const [videoLoading,     setVideoLoading]     = useState(false);
-  const [videoUrl,         setVideoUrl]         = useState(null);
-  const [msg,              setMsg]              = useState('');
+function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult }) {
+  const [copied, setCopied] = useState(null);
+  const [toast,  setToast]  = useState('');
 
-  const fetchStoryboard = async () => {
-    setStoryboardLoading(true); setStoryboard(null); setSelectedScenes(new Set()); setVideoUrl(null); setMsg('');
-    try {
-      const r = await fetch(config.api.endpoints.generateStoryboard, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reel_idea: result?.reel_idea || '',
-          hook:      result?.caption?.split('.')[0] || result?.reel_idea || '',
-          story:     result?.caption || '',
-          key_insights: '',
-          cta:       'Follow for more viral content',
-          category:  result?.category || 'Lifestyle',
-          duration:  20,
-        }),
-      });
-      const d = await r.json();
-      if (d.scenes) {
-        setStoryboard(d);
-        setSelectedScenes(new Set(d.scenes.slice(0, 3).map(s => s.id)));
-      } else setMsg(d.error || 'Storyboard failed');
-    } catch (e) { setMsg('Storyboard failed: ' + e.message); }
-    finally { setStoryboardLoading(false); }
-  };
-
-  const toggleScene = (id) => {
-    setSelectedScenes(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) { if (next.size > 2) next.delete(id); }
-      else              { if (next.size < 4) next.add(id); }
-      return next;
+  const openService = (svc, prompt) => {
+    if (!prompt) {
+      setToast('Generate a storyboard first to get the video prompt.');
+      setTimeout(() => setToast(''), 3000);
+      return;
+    }
+    // Copy prompt to clipboard
+    navigator.clipboard.writeText(prompt).then(() => {
+      setCopied(svc.id);
+      setToast(`Prompt copied! Opening ${svc.label} — just paste (Ctrl+V) and hit Generate.`);
+      setTimeout(() => { setCopied(null); setToast(''); }, 4000);
+    }).catch(() => {
+      setToast('Could not copy automatically — please copy the prompt below manually.');
+      setTimeout(() => setToast(''), 4000);
     });
+    // Open the service in a new tab
+    window.open(svc.url, '_blank', 'noopener,noreferrer');
   };
 
-  const generateVideo = async () => {
-    const chosen = storyboard.scenes.filter(s => selectedScenes.has(s.id));
-    setVideoLoading(true); setVideoUrl(null); setMsg('Generating images → video (~40s)...');
-    try {
-      const r = await fetch(config.api.endpoints.generateVideo, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reel_idea:         result?.reel_idea || '',
-          hook:              result?.caption?.split('.')[0] || '',
-          story:             result?.caption || '',
-          key_insights:      '',
-          cta:               'Follow for more',
-          category:          result?.category || 'Lifestyle',
-          duration:          20,
-          use_script_scenes: true,
-          selected_scenes:   chosen,
-        }),
-      });
-      const d = await r.json();
-      if (d.video_b64) {
-        const blob = new Blob([Uint8Array.from(atob(d.video_b64), c => c.charCodeAt(0))], { type: 'video/mp4' });
-        setVideoUrl(URL.createObjectURL(blob));
-        setMsg(d.message || 'Video ready');
-      } else setMsg(d.error || 'Generation failed — try again');
-    } catch (e) { setMsg('Failed: ' + e.message); }
-    finally { setVideoLoading(false); }
-  };
+  const prompt = videoResult?.runway_prompt || videoResult?.veo_prompt || '';
 
   return (
     <div style={{
-      marginTop: "1.5rem", borderRadius: "var(--radius)", padding: "2px",
+      marginTop: "1.5rem",
+      borderRadius: "var(--radius)",
+      padding: "2px",
       background: "linear-gradient(135deg, rgba(200,240,104,0.5), rgba(104,184,240,0.4), rgba(176,104,240,0.4))",
-      boxShadow: "0 0 40px rgba(200,240,104,0.12)",
+      boxShadow: "0 0 40px rgba(200,240,104,0.12), 0 0 80px rgba(104,184,240,0.06)",
     }}>
-      <div style={{ background: "linear-gradient(160deg, rgba(14,18,12,0.99), rgba(11,13,15,0.99))", borderRadius: "calc(var(--radius) - 2px)", padding: "1.5rem" }}>
-
+      <div style={{
+        background: "linear-gradient(160deg, rgba(14,18,12,0.99), rgba(11,13,15,0.99))",
+        borderRadius: "calc(var(--radius) - 2px)",
+        padding: "1.5rem",
+      }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "1.25rem" }}>
-          <div style={{ width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0, background: "linear-gradient(135deg, rgba(200,240,104,0.2), rgba(104,184,240,0.15))", border: "1px solid rgba(200,240,104,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>🎬</div>
+          <div style={{
+            width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(200,240,104,0.2), rgba(104,184,240,0.15))",
+            border: "1px solid rgba(200,240,104,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px",
+          }}>🎬</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--text)" }}>AI Video Generation</div>
+            <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
+              AI Video Generation
+            </div>
             <div style={{ fontSize: "12px", color: "var(--text3)", marginTop: "2px" }}>
-              {storyboard ? `Select 2-4 scenes → Generate Reel` : 'Generate a storyboard first, then pick your scenes'}
+              Generate storyboard → copy prompt → open any AI video service
             </div>
           </div>
-          {!storyboard && (
-            <button onClick={fetchStoryboard} disabled={storyboardLoading}
-              style={{ padding: "9px 18px", borderRadius: "100px", cursor: storyboardLoading ? "wait" : "pointer", background: "rgba(200,240,104,0.12)", border: "1px solid rgba(200,240,104,0.35)", color: "var(--accent)", fontSize: "12px", fontWeight: 600, fontFamily: "var(--font-body)", opacity: storyboardLoading ? 0.6 : 1 }}>
-              {storyboardLoading ? "⏳ Building..." : "Generate Storyboard →"}
-            </button>
-          )}
+          <button
+            onClick={runVideoGeneration}
+            disabled={videoLoading}
+            style={{
+              padding: "9px 18px", borderRadius: "100px", cursor: videoLoading ? "wait" : "pointer",
+              background: videoLoading ? "rgba(200,240,104,0.08)" : "rgba(200,240,104,0.12)",
+              border: "1px solid rgba(200,240,104,0.35)",
+              color: "var(--accent)", fontSize: "12px", fontWeight: 600,
+              fontFamily: "var(--font-body)", transition: "all .15s", flexShrink: 0,
+              opacity: videoLoading ? 0.6 : 1,
+            }}
+            onMouseEnter={e => { if (!videoLoading) e.currentTarget.style.background = "rgba(200,240,104,0.2)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(200,240,104,0.12)"; }}
+          >
+            {videoLoading ? "⏳ Generating..." : videoResult ? "↻ Regenerate" : "✦ Generate Storyboard"}
+          </button>
         </div>
 
-        {/* Storyboard scene grid */}
-        {storyboard && (
-          <div>
-            <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)", marginBottom: "8px" }}>
-              Click to select scenes ({selectedScenes.size} selected, max 4) · {storyboard.color_grade} · {storyboard.music_mood}
+        {/* Storyboard scenes */}
+        {videoResult && (
+          <div style={{ marginBottom: "1rem" }}>
+            <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: "8px" }}>
+              Storyboard — {videoResult.scenes?.length || 0} scenes
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
-              {storyboard.scenes.map(scene => {
-                const sel = selectedScenes.has(scene.id);
-                return (
-                  <div key={scene.id} onClick={() => toggleScene(scene.id)}
-                    style={{ padding: "10px 12px", borderRadius: "8px", cursor: "pointer", transition: "all .15s",
-                      background: sel ? "rgba(200,240,104,0.08)" : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${sel ? "rgba(200,240,104,0.4)" : "rgba(255,255,255,0.07)"}`,
-                    }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                      <span style={{ fontSize: "9px", color: sel ? "var(--accent)" : "var(--text3)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
-                        Scene {scene.id} · {scene.label || scene.shot}
-                      </span>
-                      {sel && <span style={{ fontSize: "10px", color: "var(--accent)" }}>✓</span>}
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--text2)", lineHeight: 1.4 }}>{String(scene.action || '').slice(0, 65)}</div>
-                    {scene.text_overlay && (
-                      <div style={{ fontSize: "10px", color: "var(--gold)", marginTop: "3px", fontStyle: "italic" }}>"{scene.text_overlay}"</div>
-                    )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+              {videoResult.scenes?.slice(0, 4).map((scene, i) => (
+                <div key={i} style={{
+                  padding: "10px 12px", background: "rgba(200,240,104,0.04)",
+                  border: "1px solid rgba(200,240,104,0.12)", borderRadius: "8px", fontSize: "11px",
+                }}>
+                  <div style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "9px", marginBottom: "4px", textTransform: "uppercase" }}>
+                    Scene {scene.id} · {scene.start_sec}s–{scene.end_sec}s · {scene.shot || 'wide'}
                   </div>
-                );
-              })}
+                  <div style={{ color: "var(--text2)", lineHeight: 1.5 }}>{String(scene.action || '').slice(0, 60)}</div>
+                  {scene.broll_keyword && (
+                    <div style={{ color: "var(--text3)", fontSize: "10px", marginTop: "4px" }}>🎬 {scene.broll_keyword}</div>
+                  )}
+                </div>
+              ))}
             </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <button onClick={generateVideo} disabled={videoLoading || selectedScenes.size < 2}
-                style={{ padding: "9px 18px", borderRadius: "100px", cursor: (videoLoading || selectedScenes.size < 2) ? "not-allowed" : "pointer",
-                  background: "rgba(176,104,240,0.15)", border: "1px solid rgba(176,104,240,0.4)",
-                  color: "var(--purple)", fontSize: "12px", fontWeight: 600, fontFamily: "var(--font-body)",
-                  opacity: (videoLoading || selectedScenes.size < 2) ? 0.5 : 1 }}>
-                {videoLoading ? "⏳ Generating..." : videoUrl ? "↻ Regenerate" : `Generate Video (${selectedScenes.size} scenes) →`}
-              </button>
-              <button onClick={() => { setStoryboard(null); setVideoUrl(null); setMsg(''); }} className="btn btn-ghost btn-sm" style={{ fontSize: "11px" }}>
-                ↻ New Storyboard
-              </button>
-            </div>
+
+            {/* Prompt box */}
+            {prompt && (
+              <div style={{
+                padding: "10px 14px", background: "rgba(104,184,240,0.05)",
+                border: "1px solid rgba(104,184,240,0.2)", borderRadius: "8px", marginBottom: "12px",
+              }}>
+                <div style={{ fontSize: "9px", color: "var(--blue)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "5px" }}>
+                  Video Prompt — auto-copied when you click a service
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.6 }}>{prompt}</div>
+              </div>
+            )}
           </div>
         )}
 
-        {msg && !videoUrl && (
-          <div style={{ fontSize: "11px", color: "var(--accent)", fontFamily: "var(--font-mono)", marginTop: "10px" }}>{msg}</div>
-        )}
+        {/* Instruction label */}
+        <div style={{ fontSize: "11px", color: "var(--text3)", marginBottom: "10px", fontFamily: "var(--font-mono)" }}>
+          {videoResult ? "↓ Click any platform — prompt is auto-copied to clipboard" : "↑ Generate storyboard first, then launch any platform below"}
+        </div>
 
-        {/* Video player */}
-        {videoUrl && (
-          <div style={{ marginTop: "12px" }}>
-            <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "8px" }}>✓ Video Ready</div>
-            <video src={videoUrl} controls autoPlay loop style={{ width: "100%", maxWidth: "320px", borderRadius: "12px", border: "1px solid rgba(200,240,104,0.3)", display: "block" }} />
-            <a href={videoUrl} download="ratefluencer-reel.mp4" style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>⬇ Download MP4</a>
+        {/* Service grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
+          {VIDEO_SERVICES.map(svc => (
+            <button
+              key={svc.id}
+              onClick={() => openService(svc, prompt)}
+              style={{
+                padding: "12px 6px", borderRadius: "10px", cursor: "pointer",
+                background: copied === svc.id ? svc.bg : "rgba(255,255,255,0.03)",
+                border: `1px solid ${copied === svc.id ? svc.border : "rgba(255,255,255,0.07)"}`,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+                transition: "all .15s", textAlign: "center",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = svc.bg;
+                e.currentTarget.style.borderColor = svc.border;
+                e.currentTarget.style.transform = "translateY(-2px)";
+              }}
+              onMouseLeave={e => {
+                if (copied !== svc.id) {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+                }
+                e.currentTarget.style.transform = "none";
+              }}
+            >
+              <div style={{ fontSize: "12px", fontWeight: 600, color: copied === svc.id ? svc.color : "var(--text)" }}>
+                {copied === svc.id ? "✓ Copied!" : svc.label}
+              </div>
+              <div style={{ fontSize: "9px", fontFamily: "var(--font-mono)" }}>
+                {svc.free
+                  ? <span style={{ color: "var(--accent)" }}>{svc.note}</span>
+                  : <span style={{ color: "var(--text3)" }}>{svc.note}</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Toast */}
+        {toast && (
+          <div style={{ marginTop: "10px", padding: "8px 12px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--accent)" }}>
+            {toast}
           </div>
         )}
-
       </div>
     </div>
   );
@@ -219,14 +287,28 @@ export default function AIAgent() {
   const [stepIndex,   setStepIndex]   = useState(0);
   const [error,       setError]       = useState(null);
   const [activeTab,   setActiveTab]   = useState("instagram");
-  const [prefs, setPrefs] = useState(null);
+  const [videoResult, setVideoResult] = useState(null);
+  const [videoLoading, setVideoLoading] = useState(false);
 
-  useEffect(() => {
-    fetch(config.api.endpoints.agentPreferences)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.has_preferences) setPrefs(d.preferences); })
-      .catch(() => {});
-  }, [result]);
+  const runVideoGeneration = async () => {
+    if (!result) return;
+    setVideoLoading(true);
+    setVideoResult(null);
+    try {
+      const r = await fetch(config.api.endpoints.generateVideo, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reel_idea: result.reel_idea,
+          script: result.caption,
+          category: result.category,
+          duration: 30,
+        }),
+      });
+      const d = await r.json();
+      setVideoResult(d);
+    } catch (e) { console.warn(e); }
+    finally { setVideoLoading(false); }
+  };
 
   const runAgent = async () => {
     if (!goal.trim()) return;
@@ -491,38 +573,14 @@ export default function AIAgent() {
               </div>
             )}
 
-            {/* Learning Loop Panel */}
-            {prefs && (
-              <div style={{ marginTop: "12px", padding: "1rem 1.25rem", background: "rgba(200,240,104,0.04)", border: "1px solid rgba(200,240,104,0.2)", borderRadius: "var(--radius)" }}>
-                <div style={{ fontSize: "11px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: "10px" }}>
-                  Continuous Learning — Active
-                </div>
-                <div style={{ fontSize: "12px", color: "var(--text2)", marginBottom: "8px" }}>
-                  Based on <strong style={{ color: "var(--accent)" }}>{prefs.upvoted_count} upvotes</strong> · Confidence <strong style={{ color: "var(--accent)" }}>{prefs.confidence}%</strong>
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {[
-                    { label: "Preferred Tone", val: prefs.detected_tone },
-                    { label: "Avg Hashtags",   val: `~${prefs.avg_hashtags}` },
-                    { label: "Avg Virality",   val: prefs.avg_virality },
-                  ].map(p => p.val && (
-                    <span key={p.label} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "20px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
-                      {p.label}: {p.val}
-                    </span>
-                  ))}
-                </div>
-                {prefs.preferred_words?.length > 0 && (
-                  <div style={{ fontSize: "11px", color: "var(--text3)", marginTop: "6px" }}>
-                    Preferred keywords: {prefs.preferred_words.slice(0, 5).join(", ")}
-                  </div>
-                )}
-              </div>
-            )}
-
             <FeedbackBar result={result} />
 
             {/* -- Video Generation Card -- */}
-            <VideoGeneratorCard result={result} />
+            <VideoGeneratorCard
+              runVideoGeneration={runVideoGeneration}
+              videoLoading={videoLoading}
+              videoResult={videoResult}
+            />
           </div>
         )}
       </div>
