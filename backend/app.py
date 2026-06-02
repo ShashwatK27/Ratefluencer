@@ -807,23 +807,18 @@ def engagement_score(row):
 
 
 def generated_scores(row, campaign_text, category_filters, campaign_goal):
-    csv_auth   = row.get('authenticity_score')
-    csv_growth = row.get('growth_score')
-    is_fake    = int(row.get('fake_account', 0)) == 1
+    is_fake = int(row.get('fake_account', 0)) == 1
 
-    if csv_auth is not None and not is_fake:
-        authenticity = clamp(float(csv_auth))
-        risk_level   = 'Low' if authenticity >= 70 else 'Medium' if authenticity >= 50 else 'High'
-    else:
-        auth_res     = engine.authenticity_detector.predict(prepare_authenticity_features(row))
-        authenticity = float(auth_res['probability_authentic'] * 100.0)
-        risk_level   = auth_res['risk_level']
+    # Always run ML models for unique per-creator scores.
+    # CSV pre-computed values (authenticity_score, growth_score) are coarsely
+    # bucketed (only 3-6 unique values) and cause all top creators to show
+    # identical scores (e.g. Auth=100%, Growth=90% for every fashion creator).
+    auth_res     = engine.authenticity_detector.predict(prepare_authenticity_features(row))
+    authenticity = float(auth_res['probability_authentic'] * 100.0)
+    risk_level   = auth_res['risk_level']
 
-    if csv_growth is not None:
-        growth = clamp(float(csv_growth))
-    else:
-        growth_res = engine.growth_predictor.predict(prepare_growth_features(row))
-        growth     = float(growth_res['score'])
+    growth_res = engine.growth_predictor.predict(prepare_growth_features(row))
+    growth     = float(growth_res['score'])
 
     brand_match = semantic_brand_match(row, campaign_text, category_filters)
     engagement  = engagement_score(row)
