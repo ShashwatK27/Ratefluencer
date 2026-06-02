@@ -133,27 +133,32 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
 
 
 def _bucket_scores(current: float, week_mean: float, week_max: float) -> Dict:
-    # velocity: how far above the week average is current interest
-    # (current/mean)*60 maps:  at average->60,  2x average->100 (capped)
     velocity = min(100, int((current / max(week_mean, 1)) * 60))
-
-    # novelty: is the topic at its weekly peak right now?
-    # Higher current vs max = it's peaking NOW = genuinely trending
     range_   = max(week_max - week_mean, 1)
     novelty  = min(100, max(0, int((current - week_mean) / range_ * 100)))
 
-    # trend_score: weighted combination on full 0-100 scale
-    # current_interest already 0-100 from Google (100 = peak of period)
-    trend_score = min(100, int(
-        current  * 0.40 +
-        velocity * 0.35 +
-        novelty  * 0.25
-    ))
+    # Heuristic score
+    heuristic = min(100, int(current * 0.40 + velocity * 0.35 + novelty * 0.25))
+
+    # Blend with ML model when available (trained on YouTube analytics)
+    # Map Google Trends signals to ML feature space
+    import datetime
+    ml = ml_trend_score(
+        views_7d   = current * 80_000,          # scale 0-100 interest → view proxy
+        likes_7d   = current * 2_000,
+        er         = min(0.5, current / 200.0),
+        growth     = max(0, (current - week_mean) / max(week_mean, 1) * 100),
+        day_of_week= datetime.datetime.utcnow().weekday(),
+    )
+    trend_score = int(heuristic * 0.55 + ml * 0.45) if ml is not None else heuristic
+    trend_score = min(100, trend_score)
+
     return {
         'current_interest': int(current),
         'growth_velocity':  velocity,
         'novelty':          novelty,
         'trend_score':      trend_score,
+        'ml_scored':        ml is not None,
     }
 
 

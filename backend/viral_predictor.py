@@ -253,8 +253,10 @@ class ViralPredictor:
             'comments_per_f':     comments / max(follower_count, 1),
             'reach_ratio':        reach    / max(impressions, 1),
             'log_followers':      _math.log1p(follower_count),
-            'growth_score':       float(features.get('growth_score', 65.0)),
-            'authenticity_score': float(features.get('authenticity_score', 75.0)),
+            # Use actual ML-computed scores when passed (from generated_scores),
+            # fall back to reasonable defaults only when not available
+            'growth_score':       float(features.get('growth_score') or features.get('_growth', 65.0)),
+            'authenticity_score': float(features.get('authenticity_score') or features.get('_auth', 75.0)),
         }
 
         # Build TF-IDF vector from title/caption text (v2 feature block)

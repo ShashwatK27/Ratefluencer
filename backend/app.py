@@ -374,14 +374,38 @@ def _fast_seed_chromadb(brand_matcher, creators_df, n: int = 100):
     /api/match request uses semantic search immediately.
     """
     try:
-        top = creators_df[creators_df['fake_account'] == 0].nlargest(n, 'engagement_rate')
+        real = creators_df[creators_df['fake_account'] == 0]
+
+        # Stratified sampling: take creators from EVERY niche proportionally
+        # so underrepresented niches (beauty:1542, fitness:1133) appear alongside
+        # dominant ones (fashion:11913) instead of being crowded out.
+        per_niche = max(5, n // max(real['niche'].nunique(), 1))
+        frames = []
+        for niche_val in real['niche'].unique():
+            ndf = real[real['niche'] == niche_val].nlargest(per_niche, 'engagement_rate')
+            frames.append(ndf)
+        top = pd.concat(frames).nlargest(n, 'engagement_rate') if frames else real.nlargest(n, 'engagement_rate')
+
+        # Load enriched bios if available
+        import json as _json
+        _enrich_path = BACKEND_DIR / 'creator_enriched_profiles.json'
+        enriched_map: dict = {}
+        if _enrich_path.exists():
+            try:
+                with open(_enrich_path, encoding='utf-8') as _f:
+                    enriched_map = _json.load(_f)
+            except Exception:
+                pass
+
         docs, ids, metas = [], [], []
         for _, row in top.iterrows():
             cid   = str(int(row['creator_id']))
             niche = str(row.get('niche', 'general'))
             er    = float(row.get('engagement_rate', 0))
             flw   = int(row.get('followers', 0))
-            docs.append(f"Category/Niche: {niche}. Followers: {flw:,}. Engagement: {er:.2%}.")
+            # Use enriched bio when available (much better semantic embedding)
+            doc = enriched_map.get(cid, f"Category/Niche: {niche}. Followers: {flw:,}. Engagement: {er:.2%}.")
+            docs.append(doc)
             ids.append(cid)
             metas.append({'niche': niche, 'followers': flw,
                           'engagement_rate': er, 'creator_id': int(row['creator_id']),
@@ -391,7 +415,7 @@ def _fast_seed_chromadb(brand_matcher, creators_df, n: int = 100):
         ).tolist()
         brand_matcher.collection.add(documents=docs, embeddings=embeddings, ids=ids, metadatas=metas)
         _chroma_ready.set()
-        logger.info(f"ChromaDB seeded with top {len(docs)} creators - semantic search live")
+        logger.info(f"ChromaDB seeded with {len(docs)} creators (stratified by niche) - semantic search live")
     except Exception as e:
         logger.warning(f"ChromaDB fast seed failed: {e}")
         _chroma_ready.set()   # unblock so normal requests continue
@@ -404,7 +428,11 @@ def _populate_chromadb(brand_matcher, creators_df, backend_dir):
     """
     import os as _os
     try:
-        top = creators_df[creators_df['fake_account'] == 0].nlargest(1500, 'engagement_rate')
+        real = creators_df[creators_df['fake_account'] == 0]
+        per_niche = max(10, 1500 // max(real['niche'].nunique(), 1))
+        frames = [real[real['niche'] == nv].nlargest(per_niche, 'engagement_rate')
+                  for nv in real['niche'].unique()]
+        top = pd.concat(frames).nlargest(1500, 'engagement_rate') if frames else real.nlargest(1500, 'engagement_rate')
         tmp_path = str(Path(backend_dir) / 'top_creators_temp.csv')
         top.to_csv(tmp_path, index=False, encoding='utf-8')
         n = brand_matcher.load_creators(tmp_path)
@@ -704,8 +732,19 @@ def prepare_authenticity_features(row):
     reach       = float(row.get('reach') or row.get('impressions') or max(1.0, likes * 12.0))
     impressions = float(row.get('impressions') or max(1.0, reach * 1.5))
 
-    # Prefer real columns when the data source provides them
-    following  = float(row.get('following') or (followers * max(0.01, min(3.0, 0.04 + max(0.0, (3.5 - er) * 0.12)))))
+    # Synthesise 'following' count if not in CSV.
+    # High-ER creators tend to be niche-focused (follow few people).
+    # Low-ER creators may follow many to gain followers back.
+    # Formula: f(er) → 1-5% of followers for genuine; up to 100%+ for suspicious.
+    # Capped at 3x followers (extreme follow-back behaviour).
+    # Use synthesized column if available, else estimate from ER
+    if row.get('following'):
+        following = float(row.get('following'))
+    elif row.get('following_est'):
+        following = float(row.get('following_est'))
+    else:
+        fo_ratio  = max(0.01, min(3.0, 0.03 + max(0.0, (4.0 - er) * 0.18)))
+        following = followers * fo_ratio
     avg_hash   = float(row.get('avg_hashtags') or 15.0)
     er_likes   = float(row.get('er_likes')    or likes    / followers * 100)
     er_cmts    = float(row.get('er_comments') or comments / followers * 100)
