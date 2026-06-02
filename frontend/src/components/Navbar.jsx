@@ -6,6 +6,7 @@ const LINKS = [
   { route: '/viral-lab',      label: 'Viral Lab'      },
   { route: '/ai-agent',       label: 'AI Agent'       },
   { route: '/creator-corner', label: 'Creator Corner' },
+  { route: '/about',          label: 'About'          },
 ];
 
 const ICON_MENUS = [

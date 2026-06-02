@@ -117,5 +117,6 @@ export const sidebarNav = {
     { icon: '📋', label: 'Shortlist',        route: '/shortlist',         iconBg: 'rgba(255,255,255,0.05)' },
     { icon: '⚙️', label: 'Preferences',      route: '/preferences',       iconBg: 'rgba(255,255,255,0.05)' },
     { icon: '✨', label: 'My Score',          route: '/influencer-portal', iconBg: 'rgba(200,240,104,0.08)' },
+    { icon: 'ℹ️', label: 'About',             route: '/about',             iconBg: 'rgba(104,184,240,0.08)' },
   ],
 };
