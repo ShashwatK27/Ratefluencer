@@ -141,15 +141,17 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     const q   = searchQuery.toLowerCase();
     const cat = activeCategory.toLowerCase();
-    return allCreators.filter(inf => {
-      const matchSearch = !q ||
-        inf.name?.toLowerCase().includes(q) ||
-        inf.handle?.toLowerCase().includes(q) ||
-        (inf.cat || '').toLowerCase().includes(q);
-      const matchCat = activeCategory === 'All' ||
-        (inf.cat || '').toLowerCase().includes(cat);
-      return matchSearch && matchCat;
-    });
+    return allCreators
+      .filter(inf => {
+        const matchSearch = !q ||
+          inf.name?.toLowerCase().includes(q) ||
+          inf.handle?.toLowerCase().includes(q) ||
+          (inf.cat || '').toLowerCase().includes(q);
+        const matchCat = activeCategory === 'All' ||
+          (inf.cat || '').toLowerCase().includes(cat);
+        return matchSearch && matchCat;
+      })
+      .sort((a, b) => (b.score || 0) - (a.score || 0));  // best Ratefluencer score first
   }, [allCreators, searchQuery, activeCategory]);
 
   // Reset to page 0 when filters change
