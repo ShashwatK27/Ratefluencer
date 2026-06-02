@@ -33,6 +33,8 @@ def _get_yt_key() -> str:
 def _record_yt_units(units: int):
     pass   # no-op without key rotator
 
+logger = logging.getLogger(__name__)
+
 # -- ML trend velocity scorer (trained on YouTube analytics) -------------------
 _trend_clf     = None
 _trend_feats   = None
@@ -79,8 +81,6 @@ def ml_trend_score(views_7d: float, likes_7d: float, er: float,
 # Simple in-memory cache for YouTube Search results (TTL = 1 hour).
 # search.list costs 100 units; caching means one call per category per hour.
 _yt_search_cache: Dict[str, dict] = {}   # key -> {'ts': float, 'results': List[Dict]}
-
-logger = logging.getLogger(__name__)
 
 CATEGORY_SUBREDDITS: Dict[str, List[str]] = {
     'Fashion':     ['fashion', 'streetwear', 'femalefashionadvice', 'malefashionadvice'],
