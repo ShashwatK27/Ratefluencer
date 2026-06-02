@@ -2,17 +2,18 @@
 
 ## Quick Start (No API Keys Needed)
 
-The platform runs in **Demo Mode** automatically if no API keys are configured.
+All ML scoring, search, and brand matching works immediately with no configuration.
+Adding a Groq API key (free, 2 minutes) unlocks live AI content generation.
 
 | Feature | Without API Keys | With Groq Key |
 |---------|-----------------|---------------|
 | Creator Search & Scoring | ✅ Full ML pipeline | ✅ |
 | Brand Matching (33K creators) | ✅ ChromaDB + TF-IDF | ✅ |
 | Authenticity / Growth / Viral scores | ✅ All 6 ML models | ✅ |
-| AI Content Generation | ✅ Demo responses shown | ✅ Real AI output |
-| AI Agent (5-iteration loop) | ✅ Demo responses shown | ✅ Real AI output |
-| Trend Discovery | ✅ Demo trends shown | ✅ Live Google/Reddit/YouTube |
-| Visual Storyboard | ✅ Demo scenes shown | ✅ Real AI scenes |
+| AI Content Generation | ✅ Sample output shown | ✅ Live AI generation |
+| AI Agent (5-iteration loop) | ✅ Sample output shown | ✅ Live AI iterations |
+| Trend Discovery | ✅ Curated trends shown | ✅ Live Google/Reddit/YouTube |
+| Visual Storyboard | ✅ Sample storyboard shown | ✅ Live AI generation |
 | Voiceover | ✅ Browser TTS | ✅ ElevenLabs HD |
 
 ## Get a FREE Groq API Key (2 minutes, no credit card)

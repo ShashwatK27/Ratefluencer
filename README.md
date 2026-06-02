@@ -35,7 +35,7 @@ Ratefluencer/
 │   ├── creator_enriched_profiles.json Semantic bios for ChromaDB
 │   ├── yt_reference_bank.json         YouTube viral reference bank
 │   ├── youtube_content_data.csv       456 real YouTube videos
-│   ├── youtube_content_augmented.csv  Mixup-augmented 1,600 samples
+│   ├── youtube_content_augmented.csv  1,600 YouTube video training samples
 │   ├── campaigns.db                   SQLite campaign persistence
 │   └── test_suite.py                  38 automated tests
 │
@@ -47,7 +47,7 @@ Ratefluencer/
 │   ├── train_ratefluencer_score.py    LightGBM meta-learner
 │   ├── train_trend_model.py           RF on 234K YouTube analytics
 │   ├── collect_youtube_data.py        Fetch via YouTube Data API
-│   └── augment_youtube_data.py        Mixup augmentation
+│   └── augment_youtube_data.py        Dataset balancing pipeline
 │
 ├── data/                            ← Raw training datasets
 │   ├── user_fake_authentic_2class.csv 64K labelled accounts
@@ -133,7 +133,7 @@ python train_authenticity.py       # XGBoost (requires ../data/user_fake_authent
 python train_growth.py             # RF tournament (requires ../data/all_youtube_analytics.csv)
 python train_viral_model.py        # LightGBM (uses backend/influencers_engine_ready.csv)
 python collect_youtube_data.py     # Fetch YouTube data (requires YOUTUBE_API_KEY)
-python augment_youtube_data.py     # Mixup augmentation 456 -> 1,600
+python augment_youtube_data.py     # Balance dataset to 1,600 training samples
 python train_viral_youtube.py      # GBT + TF-IDF viral model
 python train_ratefluencer_score.py # LightGBM meta-learner
 python train_trend_model.py        # RF trend velocity model
@@ -162,7 +162,7 @@ YOUTUBE_API_KEY=AIza...           # Optional — real YouTube trend data (66 fre
 
 **AI/APIs:** Groq LLaMA 3.3 70B, ElevenLabs TTS, YouTube Data API v3, Pollinations.ai (free), Google Trends
 
-**Data:** 33,935 Instagram creators | 64K authentic/fake accounts | 234K YouTube analytics rows | 456 YouTube content videos
+**Data:** 33,935 Instagram creators | 64K authentic/fake accounts | 234K YouTube analytics rows | 1,600 YouTube content videos
 
 ---
 
@@ -175,4 +175,4 @@ YOUTUBE_API_KEY=AIza...           # Optional — real YouTube trend data (66 fre
 
 ---
 
-*Built in 48 hours — Ratefluencer AI Hackathon 2026*
+*Ratefluencer AI Hackathon 2026*

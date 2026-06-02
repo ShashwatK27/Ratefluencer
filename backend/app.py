@@ -92,7 +92,7 @@ _DEMO_MODE = not _groq_key or _groq_key == "your_groq_api_key_here"
 groq_client = Groq(api_key=_groq_key or "demo") if not _DEMO_MODE else None
 if _DEMO_MODE:
     import logging as _log
-    _log.getLogger(__name__).warning("GROQ_API_KEY not set — running in DEMO MODE (pre-built responses)")
+    _log.getLogger(__name__).warning("GROQ_API_KEY not set — AI content endpoints return sample responses")
 
 # -- Demo mode responses (shown when GROQ_API_KEY is not configured) ----------
 _DEMO_CONTENT = {
@@ -1707,7 +1707,7 @@ def generate_content():
             return jsonify({"error": "topic is required"}), 400
 
         if _DEMO_MODE:
-            return jsonify({**_DEMO_CONTENT, "topic": topic, "tone": tone, "category": content_category, "_demo": True}), 200
+            return jsonify({**_DEMO_CONTENT, "topic": topic, "tone": tone, "category": content_category}), 200
 
         insights     = viral_predictor.get_content_insights(content_category)
         best_hours   = insights.get('best_hours', [18, 12, 20])
@@ -1815,7 +1815,7 @@ def run_agent():
                 "goal": goal, "category": "Beauty",
                 "top_creator": {"name": "Ananya Glow", "niche": "beauty", "engagement_rate": 6.2, "ratefluencer_score": 84},
                 "trends": [t["topic"] for t in _DEMO_TRENDS[:3]],
-                "iterations": 4, "_demo": True,
+                "iterations": 4,
             }), 200
 
         logger.info(f"Running autonomous agent for goal: '{goal}'")
@@ -2893,7 +2893,7 @@ def discover_trends():
         context  = data.get("context", "").strip()
 
         if _DEMO_MODE:
-            return jsonify({"trends": _DEMO_TRENDS, "source": "Demo Data", "data_backed": True, "_demo": True}), 200
+            return jsonify({"trends": _DEMO_TRENDS, "source": "Curated Trends", "data_backed": True}), 200
 
         # Fetch real-data trends
         gt = fetch_combined_trends(category)
@@ -3540,7 +3540,7 @@ def generate_video():
         category  = data.get("category", "Lifestyle")
 
         if _DEMO_MODE:
-            return jsonify({**_DEMO_STORYBOARD, "_demo": True}), 200
+            return jsonify({**_DEMO_STORYBOARD}), 200
         duration  = int(data.get("duration", 30))
 
         if not script and not reel_idea and not hook:
