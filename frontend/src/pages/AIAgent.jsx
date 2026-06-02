@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
+import ReelVideoCreator from "../components/ReelVideoCreator.jsx";
 
 const AGENT_STEPS = [
   { icon: "🔍", label: "Discovering Real-Time Trends (Google + Reddit + News)..." },
@@ -115,17 +116,9 @@ const VIDEO_SERVICES = [
   },
 ];
 
-function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult }) {
-  const [copied,     setCopied]     = useState(null);
-  const [toast,      setToast]      = useState('');
-  const [imgErrors,  setImgErrors]  = useState({});   // track failed image loads
-
+function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult, videoError }) {
   const openService = (svc, prompt) => {
-    if (!prompt) {
-      setToast('Generate a storyboard first to get the video prompt.');
-      setTimeout(() => setToast(''), 3000);
-      return;
-    }
+    if (!prompt) return;
     // Copy prompt to clipboard
     navigator.clipboard.writeText(prompt).then(() => {
       setCopied(svc.id);
@@ -188,130 +181,23 @@ function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult }) {
           </button>
         </div>
 
-        {/* Storyboard scenes with Pollinations AI images */}
-        {videoResult && (
-          <div style={{ marginBottom: "1rem" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                AI Visual Storyboard — {videoResult.scenes?.length || 0} scenes
-              </div>
-              <span style={{ fontSize: "9px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
-                powered by Pollinations.ai (free)
-              </span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "10px" }}>
-              {videoResult.scenes?.slice(0, 4).map((scene, i) => (
-                <div key={i} style={{
-                  background: "var(--bg)", border: "1px solid var(--border)",
-                  borderRadius: "10px", overflow: "hidden", fontSize: "11px",
-                }}>
-                  {/* AI-generated scene image from Pollinations */}
-                  {scene.image_url && !imgErrors[i] ? (
-                    <div style={{ position: "relative", paddingTop: "56.25%", background: "var(--bg3)" }}>
-                      <img
-                        src={scene.image_url}
-                        alt={"Scene " + (i + 1)}
-                        onError={() => setImgErrors(prev => ({ ...prev, [i]: true }))}
-                        style={{
-                          position: "absolute", inset: 0, width: "100%", height: "100%",
-                          objectFit: "cover", borderRadius: "0",
-                        }}
-                        loading="lazy"
-                      />
-                      <div style={{
-                        position: "absolute", bottom: 0, left: 0, right: 0,
-                        padding: "4px 8px", background: "rgba(0,0,0,0.65)",
-                        fontSize: "9px", color: "#fff", fontFamily: "var(--font-mono)",
-                      }}>
-                        Scene {scene.id} · {scene.start_sec}s–{scene.end_sec}s
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: "10px 12px", background: "rgba(200,240,104,0.04)", minHeight: "80px", display: "flex", alignItems: "center" }}>
-                      <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>Scene {scene.id}</div>
-                    </div>
-                  )}
-                  {/* Scene description */}
-                  <div style={{ padding: "8px 10px" }}>
-                    <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "3px" }}>
-                      {scene.shot || "wide"} · {scene.duration_sec || (scene.end_sec - scene.start_sec)}s
-                    </div>
-                    <div style={{ color: "var(--text2)", lineHeight: 1.4, fontSize: "11px" }}>
-                      {String(scene.action || '').slice(0, 65)}
-                    </div>
-                    {scene.text_overlay && (
-                      <div style={{ color: "var(--text3)", fontSize: "10px", marginTop: "3px", fontStyle: "italic" }}>
-                        "{scene.text_overlay}"
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Prompt box */}
-            {prompt && (
-              <div style={{
-                padding: "10px 14px", background: "rgba(104,184,240,0.05)",
-                border: "1px solid rgba(104,184,240,0.2)", borderRadius: "8px", marginBottom: "12px",
-              }}>
-                <div style={{ fontSize: "9px", color: "var(--blue)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "5px" }}>
-                  Video Prompt — auto-copied when you click a service
-                </div>
-                <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.6 }}>{prompt}</div>
-              </div>
-            )}
+        {/* Error state */}
+        {videoError && (
+          <div style={{ padding: "10px 14px", background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.25)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "#ff7070", marginBottom: "1rem" }}>
+            Generation failed: {videoError}
           </div>
         )}
 
-        {/* Instruction label */}
-        <div style={{ fontSize: "11px", color: "var(--text3)", marginBottom: "10px", fontFamily: "var(--font-mono)" }}>
-          {videoResult ? "↓ Click any platform — prompt is auto-copied to clipboard" : "↑ Generate storyboard first, then launch any platform below"}
-        </div>
-
-        {/* Service grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
-          {VIDEO_SERVICES.map(svc => (
-            <button
-              key={svc.id}
-              onClick={() => openService(svc, prompt)}
-              style={{
-                padding: "12px 6px", borderRadius: "10px", cursor: "pointer",
-                background: copied === svc.id ? svc.bg : "rgba(255,255,255,0.03)",
-                border: `1px solid ${copied === svc.id ? svc.border : "rgba(255,255,255,0.07)"}`,
-                display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
-                transition: "all .15s", textAlign: "center",
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = svc.bg;
-                e.currentTarget.style.borderColor = svc.border;
-                e.currentTarget.style.transform = "translateY(-2px)";
-              }}
-              onMouseLeave={e => {
-                if (copied !== svc.id) {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-                }
-                e.currentTarget.style.transform = "none";
-              }}
-            >
-              <div style={{ fontSize: "12px", fontWeight: 600, color: copied === svc.id ? svc.color : "var(--text)" }}>
-                {copied === svc.id ? "✓ Copied!" : svc.label}
-              </div>
-              <div style={{ fontSize: "9px", fontFamily: "var(--font-mono)" }}>
-                {svc.free
-                  ? <span style={{ color: "var(--accent)" }}>{svc.note}</span>
-                  : <span style={{ color: "var(--text3)" }}>{svc.note}</span>}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Toast */}
-        {toast && (
-          <div style={{ marginTop: "10px", padding: "8px 12px", background: "rgba(200,240,104,0.08)", border: "1px solid rgba(200,240,104,0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--accent)" }}>
-            {toast}
+        {/* No result yet */}
+        {!videoResult && !videoLoading && (
+          <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
+            Click Generate Storyboard → AI creates 4 scene images → Preview & download video
           </div>
+        )}
+
+        {/* Storyboard + in-browser video creator */}
+        {videoResult?.scenes?.length > 0 && (
+          <ReelVideoCreator scenes={videoResult.scenes} category={videoResult.category || "Lifestyle"} />
         )}
       </div>
     </div>
@@ -328,11 +214,13 @@ export default function AIAgent() {
   const [activeTab,   setActiveTab]   = useState("instagram");
   const [videoResult, setVideoResult] = useState(null);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState(null);
 
   const runVideoGeneration = async () => {
     if (!result) return;
     setVideoLoading(true);
     setVideoResult(null);
+    setVideoError(null);
     try {
       const r = await fetch(config.api.endpoints.generateVideo, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -344,8 +232,10 @@ export default function AIAgent() {
         }),
       });
       const d = await r.json();
-      setVideoResult(d);
-    } catch (e) { console.warn(e); }
+      if (d.error) { setVideoError(d.error); } else { setVideoResult({ ...d, category: result.category || "Lifestyle" }); }
+    } catch (e) {
+      setVideoError('Could not reach backend. Make sure the server is running on localhost:5000.');
+    }
     finally { setVideoLoading(false); }
   };
 
@@ -619,6 +509,7 @@ export default function AIAgent() {
               runVideoGeneration={runVideoGeneration}
               videoLoading={videoLoading}
               videoResult={videoResult}
+              videoError={videoError}
             />
           </div>
         )}

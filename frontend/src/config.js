@@ -43,6 +43,7 @@ export const config = {
       detectAnomalies:   `${API_URL}/api/detect-anomalies`,
       postingFrequency:  `${API_URL}/api/posting-frequency`,
       generateStoryboard:`${API_URL}/api/generate-video`,
+      proxyImage:        `${API_URL}/api/proxy-image`,
     }
   },
   app: {

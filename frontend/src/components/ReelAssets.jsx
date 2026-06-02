@@ -153,125 +153,167 @@ function Voiceover({ script }) {
       <div style={{ fontSize: "11px", color: "var(--text3)", lineHeight: 1.6 }}>
         Powered by ElevenLabs . <strong style={{ color: "var(--text2)" }}>eleven_multilingual_v2</strong> model . Free tier: 10K chars/month
       </div>
-      <style>{`@keyframes waveBar { from{transform:scaleY(0.4)} to{transform:scaleY(1)} }`}</style>
+      <style>{`@keyframes waveBar { from{transform:scaleY(0.4)} to{transform:scaleY(1)} } @keyframes spin { to{transform:rotate(360deg)} }`}</style>
     </div>
   );
 }
 
 // -- Thumbnail ----------------------------------------------------------------
+const ACCENT = {
+  Beauty: "#F07898", Fitness: "#38BDF8", Fashion: "#B57BFF", Food: "#F97316",
+  Travel: "#06B6D4", Technology: "#4ADE80", Gaming: "#A855F7", Finance: "#10B981",
+  Wellness: "#34D399", Lifestyle: "#C8F068", default: "#C8F068",
+};
+
 function Thumbnail({ reelIdea, category, viralityScore }) {
   const canvasRef = useRef(null);
+  const [generating, setGenerating] = useState(false);
+  const [imgLoaded,  setImgLoaded]  = useState(false);
 
-  const GRADIENTS = {
-    Fitness:       ["#1a1a2e","#16213e","#0f3460"],
-    Beauty:        ["#1a0a0e","#2d1020","#8B0038"],
-    Fashion:       ["#0a0a1a","#1a0a2e","#4a0080"],
-    Food:          ["#1a0e0a","#2e1a10","#7a3010"],
-    Technology:    ["#0a1a0a","#0a2e1a","#005a2e"],
-    Travel:        ["#0a1020","#102040","#003080"],
-    default:       ["#0B0D0F","#111417","#1a1c20"],
+  const THEMES = {
+    Beauty:     { bg: ["#1a0612","#2d0a22","#1a0612"], accent: "#F07898", accent2: "#FFB6C1", icon: "✦" },
+    Fitness:    { bg: ["#030d1a","#061a30","#0a2040"], accent: "#38BDF8", accent2: "#7DD3FC", icon: "◈" },
+    Fashion:    { bg: ["#0d0a1a","#1a0d30","#0d0a1a"], accent: "#B57BFF", accent2: "#DDB6FF", icon: "◆" },
+    Food:       { bg: ["#1a0a00","#2d1400","#1a0a00"], accent: "#F97316", accent2: "#FED7AA", icon: "◉" },
+    Travel:     { bg: ["#000d1a","#001a2e","#000d1a"], accent: "#06B6D4", accent2: "#A5F3FC", icon: "◎" },
+    Technology: { bg: ["#030d03","#061a06","#030d03"], accent: "#4ADE80", accent2: "#BBF7D0", icon: "◈" },
+    Gaming:     { bg: ["#0d0014","#1a0028","#0d0014"], accent: "#A855F7", accent2: "#D8B4FE", icon: "◆" },
+    Finance:    { bg: ["#001a0d","#002d1a","#001a0d"], accent: "#10B981", accent2: "#6EE7B7", icon: "◉" },
+    Wellness:   { bg: ["#001a14","#002d22","#001a14"], accent: "#34D399", accent2: "#A7F3D0", icon: "✦" },
+    Lifestyle:  { bg: ["#0B0D0F","#111820","#0B0D0F"], accent: "#C8F068", accent2: "#E8FFB0", icon: "◎" },
+    default:    { bg: ["#0B0D0F","#111820","#0B0D0F"], accent: "#C8F068", accent2: "#E8FFB0", icon: "◎" },
+  };
+
+  const drawOverlay = (ctx, W, H, imgLoaded) => {
+    const accent = ACCENT[category] || ACCENT.default;
+    const score  = viralityScore || 0;
+
+    if (!imgLoaded) {
+      // Fallback gradient background
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, "#0B0D0F"); bg.addColorStop(1, "#1a1c20");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    }
+
+    // Dark gradient over bottom 40% (text legibility)
+    const shade = ctx.createLinearGradient(0, H * 0.5, 0, H);
+    shade.addColorStop(0, "rgba(0,0,0,0)");
+    shade.addColorStop(0.4, "rgba(0,0,0,0.65)");
+    shade.addColorStop(1,   "rgba(0,0,0,0.9)");
+    ctx.fillStyle = shade; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+
+    // Thin top strip
+    ctx.fillStyle = accent + "30";
+    ctx.fillRect(0, 0, W, 56);
+    ctx.fillStyle = accent;
+    ctx.fillRect(0, 52, W, 3);
+
+    // Category pill
+    ctx.font = "bold 12px 'DM Mono', monospace";
+    ctx.fillStyle = accent; ctx.textAlign = "left";
+    ctx.fillText(category.toUpperCase(), 22, 34);
+
+    // Virality score top-right
+    ctx.font = "bold 13px 'DM Mono', monospace";
+    ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.textAlign = "right";
+    ctx.fillText("VIRAL", W - 22, 28);
+    ctx.font = `bold 22px Georgia, serif`;
+    ctx.fillStyle = score >= 80 ? accent : score >= 60 ? "#F0C868" : "#F07868";
+    ctx.fillText(score, W - 22, 50);
+
+    // Main hook text (large, bottom portion)
+    const hook = (reelIdea || "Viral Reel Concept").split(".")[0];
+    ctx.textAlign = "left"; ctx.fillStyle = "#FFFFFF";
+    ctx.shadowColor = "rgba(0,0,0,0.9)"; ctx.shadowBlur = 12;
+    wrapText(ctx, hook, 28, H - 180, W - 56, 50, "bold 34px Georgia, 'Instrument Serif', serif");
+    ctx.shadowBlur = 0;
+
+    // Bottom brand bar
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(0, H - 64, W, 64);
+    ctx.fillStyle = accent; ctx.fillRect(0, H - 64, W, 2);
+
+    ctx.font = "bold 15px Georgia, serif";
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+    ctx.fillText("Ratefluencer", 22, H - 30);
+    ctx.font = "11px 'DM Mono', monospace";
+    ctx.fillStyle = accent;
+    const rw = ctx.measureText("Ratefluencer").width;
+    ctx.fillText(" AI", 22 + rw, H - 30);
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.textAlign = "right";
+    ctx.fillText("AI-SCORED", W - 22, H - 30);
   };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
     const W = 540, H = 960;
-    canvas.width  = W;
-    canvas.height = H;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
 
-    // Background gradient
-    const [c1, c2, c3] = GRADIENTS[category] || GRADIENTS.default;
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, c1);
-    bg.addColorStop(0.5, c2);
-    bg.addColorStop(1, c3);
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    setGenerating(true);
+    setImgLoaded(false);
 
-    // Grid overlay
-    ctx.strokeStyle = "rgba(255,255,255,0.03)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    // Generate a scene-like image via Pollinations using the reel idea as prompt
+    const prompt = `${reelIdea || category + " content"}, cinematic scene, ${category} creator, warm cinematic lighting, 9:16 vertical, Instagram reel, high quality, no text`;
+    const encoded = encodeURIComponent(prompt.slice(0, 300));
+    const imgUrl  = `https://image.pollinations.ai/prompt/${encoded}?width=540&height=960&seed=77&model=flux&nologo=true`;
 
-    // Glow circle
-    const glow = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, 350);
-    glow.addColorStop(0, "rgba(200,240,104,0.12)");
-    glow.addColorStop(1, "rgba(200,240,104,0)");
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, W, H);
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
 
-    // Category pill
-    ctx.fillStyle = "rgba(200,240,104,0.15)";
-    roundRect(ctx, W/2-60, 80, 120, 32, 16);
-    ctx.fill();
-    ctx.font = "bold 13px 'DM Mono', monospace";
-    ctx.fillStyle = "#C8F068";
-    ctx.textAlign = "center";
-    ctx.fillText(category.toUpperCase(), W/2, 101);
+    const drawWithImage = () => {
+      ctx.drawImage(img, 0, 0, W, H);
+      drawOverlay(ctx, W, H, true);
+      setImgLoaded(true);
+      setGenerating(false);
+    };
 
-    // Reel idea text (main hook)
-    const hook = reelIdea?.split(".")?.[0] || reelIdea || "Viral Reel Concept";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#F0EDE8";
-    wrapText(ctx, hook, W/2, 340, W - 80, 52, "bold 36px 'Instrument Serif', serif");
+    const drawFallback = () => {
+      drawOverlay(ctx, W, H, false);
+      setGenerating(false);
+    };
 
-    // Divider line
-    ctx.strokeStyle = "rgba(200,240,104,0.4)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(W/2-80, 560); ctx.lineTo(W/2+80, 560);
-    ctx.stroke();
+    img.onload  = drawWithImage;
+    img.onerror = drawFallback;
 
-    // Virality score
-    ctx.font = "bold 72px 'Instrument Serif', serif";
-    ctx.fillStyle = "#C8F068";
-    ctx.textAlign = "center";
-    ctx.fillText(viralityScore || " - ", W/2, 660);
-    ctx.font = "13px 'DM Mono', monospace";
-    ctx.fillStyle = "rgba(200,240,104,0.6)";
-    ctx.fillText("VIRALITY SCORE", W/2, 685);
+    // Proxy through backend to resolve CORS for canvas.toDataURL()
+    img.src = `${config.api.baseURL}/api/proxy-image?url=${encodeURIComponent(imgUrl)}`;
 
-    // Ratefluencer watermark
-    ctx.font = "bold 15px 'Instrument Serif', serif";
-    ctx.fillStyle = "rgba(255,255,255,0.25)";
-    ctx.textAlign = "center";
-    ctx.fillText("Ratefluencer™", W/2, H - 50);
-
-    // Bottom accent line
-    const accentLine = ctx.createLinearGradient(0, H-4, W, H-4);
-    accentLine.addColorStop(0, "transparent");
-    accentLine.addColorStop(0.5, "#C8F068");
-    accentLine.addColorStop(1, "transparent");
-    ctx.strokeStyle = accentLine;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(0, H-4); ctx.lineTo(W, H-4); ctx.stroke();
-
+    // Show fallback immediately, image replaces it when ready
+    drawOverlay(ctx, W, H, false);
   }, [reelIdea, category, viralityScore]);
 
   const download = () => {
-    const canvas = canvasRef.current;
     const link = document.createElement("a");
     link.download = "reel-thumbnail.png";
-    link.href = canvas.toDataURL("image/png");
+    link.href = canvasRef.current.toDataURL("image/png");
     link.click();
   };
 
   return (
-    <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-      <canvas ref={canvasRef} style={{ width: "135px", height: "240px", borderRadius: "10px", border: "1px solid var(--border2)", flexShrink: 0 }} />
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-        <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.6 }}>
-          Auto-generated 9:16 thumbnail from your reel concept. Download and use directly or customise in Canva.
+    <div style={{ display: "flex", gap: "20px", alignItems: "flex-start" }}>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <canvas ref={canvasRef} style={{ width: "148px", height: "263px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", display: "block", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} />
+        {generating && !imgLoaded && (
+          <div style={{ position: "absolute", top: "8px", right: "8px", width: "16px", height: "16px", border: "2px solid rgba(200,240,104,0.2)", borderTopColor: "#C8F068", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ fontSize: "13px", color: "var(--text)", fontWeight: 500 }}>9:16 Reel Thumbnail</div>
+        <div style={{ fontSize: "12px", color: "var(--text3)", lineHeight: 1.6 }}>
+          {generating && !imgLoaded ? "Generating AI scene image..." : "AI scene image with your reel concept. Download and use directly."}
         </div>
         <button onClick={download} style={{
-          padding: "7px 16px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+          padding: "8px 18px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
           background: "rgba(200,240,104,0.1)", border: "1px solid rgba(200,240,104,0.3)",
-          color: "var(--accent)", fontFamily: "var(--font-body)",
+          color: "var(--accent)", fontFamily: "var(--font-body)", fontWeight: 500,
         }}>
           ⬇ Download PNG
         </button>
+        <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
+          540 × 960 px · PNG · AI scene background
+        </div>
       </div>
     </div>
   );

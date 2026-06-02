@@ -170,7 +170,7 @@ YOUTUBE_API_KEY=AIza...           # Optional — real YouTube trend data (66 fre
 
 | Member | Role |
 |---|---|
-| **Shashwat Kulkarni** | Backend + ML — Flask API, XGBoost/LightGBM models, ChromaDB RAG pipeline |
+| **Shashwat** | Backend + ML — Flask API, XGBoost/LightGBM models, ChromaDB RAG pipeline |
 | **Vaidehi Turkar** | Frontend + Product — React 18 UI, Campaign wizard, AI Agent, ContentStudio |
 
 ---

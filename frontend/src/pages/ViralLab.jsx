@@ -3,118 +3,15 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { config } from "../config.js";
 import ReelAssets from "../components/ReelAssets.jsx";
+import ReelVideoCreator from "../components/ReelVideoCreator.jsx";
 
-// -- Quick Video Launcher (compact, inline) ------------------------------------
 const QUICK_SERVICES = [
-  { id: 'kling',  label: 'Kling AI',     url: 'https://klingai.com/text-to-video/new',                       color: '#68B8F0', free: '66 free/day'  },
-  { id: 'luma',   label: 'Luma',         url: 'https://lumalabs.ai/dream-machine',                            color: '#B068F0', free: '30 free/mo'   },
-  { id: 'pika',   label: 'Pika Labs',    url: 'https://pika.art/create',                                      color: '#F07868', free: 'free tier'    },
-  { id: 'runway', label: 'Runway',       url: 'https://app.runwayml.com/video-tools/teams',                   color: '#C8F068', free: 'needs credits' },
-  { id: 'veo',    label: 'Google Veo',   url: 'https://aitestkitchen.withgoogle.com/tools/video-fx',          color: '#F0C968', free: 'free'         },
+  { id: 'kling',  label: 'Kling AI',   url: 'https://klingai.com/text-to-video/new',                     color: '#68B8F0', free: '66 free/day'  },
+  { id: 'luma',   label: 'Luma',       url: 'https://lumalabs.ai/dream-machine',                          color: '#B068F0', free: '30 free/mo'   },
+  { id: 'pika',   label: 'Pika Labs',  url: 'https://pika.art/create',                                    color: '#F07868', free: 'free tier'    },
+  { id: 'runway', label: 'Runway',     url: 'https://app.runwayml.com/video-tools/teams',                 color: '#C8F068', free: 'needs credits' },
+  { id: 'veo',    label: 'Google Veo', url: 'https://aitestkitchen.withgoogle.com/tools/video-fx',        color: '#F0C968', free: 'free'         },
 ];
-
-function QuickVideoLauncher({ prompt }) {
-  const [copied, setCopied] = useState(null);
-  const [msg, setMsg]       = useState('');
-
-  const launch = (svc) => {
-    navigator.clipboard.writeText(prompt || '').then(() => {
-      setCopied(svc.id);
-      setMsg(`Prompt copied! ${svc.label} opened — just paste (Ctrl+V) and click Generate.`);
-      setTimeout(() => { setCopied(null); setMsg(''); }, 4000);
-    }).catch(() => {
-      setMsg('Auto-copy failed — please manually copy the prompt above.');
-      setTimeout(() => setMsg(''), 3000);
-    });
-    window.open(svc.url, '_blank', 'noopener,noreferrer');
-  };
-
-  return (
-    <div style={{
-      marginTop: "1.5rem",
-      borderRadius: "var(--radius)",
-      padding: "2px",
-      background: "linear-gradient(135deg, rgba(240,120,104,0.6), rgba(176,104,240,0.5), rgba(200,240,104,0.4))",
-      boxShadow: "0 0 32px rgba(240,120,104,0.15)",
-    }}>
-      <div style={{
-        background: "linear-gradient(135deg, rgba(17,12,20,0.98), rgba(11,13,15,0.98))",
-        borderRadius: "calc(var(--radius) - 2px)",
-        padding: "1.25rem 1.5rem",
-      }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
-          <div style={{
-            width: "36px", height: "36px", borderRadius: "10px", flexShrink: 0,
-            background: "linear-gradient(135deg, rgba(240,120,104,0.25), rgba(176,104,240,0.2))",
-            border: "1px solid rgba(240,120,104,0.35)",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px",
-          }}>🎬</div>
-          <div>
-            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
-              Generate Reel Video
-            </div>
-            <div style={{ fontSize: "11px", color: "var(--text3)", marginTop: "1px" }}>
-              Prompt auto-copied — click any platform to open and paste
-            </div>
-          </div>
-          <div style={{
-            marginLeft: "auto", fontSize: "10px", fontFamily: "var(--font-mono)",
-            color: "rgba(240,120,104,0.9)", padding: "3px 8px", borderRadius: "20px",
-            background: "rgba(240,120,104,0.1)", border: "1px solid rgba(240,120,104,0.25)",
-          }}>AI-POWERED</div>
-        </div>
-
-        {/* Service grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
-          {QUICK_SERVICES.map(svc => (
-            <button
-              key={svc.id}
-              onClick={() => launch(svc)}
-              style={{
-                padding: "10px 6px", borderRadius: "10px", cursor: "pointer",
-                border: `1px solid ${copied === svc.id ? svc.color : 'rgba(255,255,255,0.07)'}`,
-                background: copied === svc.id ? `${svc.color}18` : "rgba(255,255,255,0.03)",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
-                transition: "all .15s", fontFamily: "var(--font-body)",
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = `${svc.color}15`;
-                e.currentTarget.style.borderColor = svc.color;
-                e.currentTarget.style.transform = "translateY(-2px)";
-              }}
-              onMouseLeave={e => {
-                if (copied !== svc.id) {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-                }
-                e.currentTarget.style.transform = "none";
-              }}
-            >
-              <div style={{ fontSize: "12px", fontWeight: 600, color: copied === svc.id ? svc.color : "var(--text)", textAlign: "center", lineHeight: 1.2 }}>
-                {copied === svc.id ? "✓ Copied!" : svc.label}
-              </div>
-              <div style={{ fontSize: "9px", color: svc.color, fontFamily: "var(--font-mono)", opacity: 0.85 }}>
-                {svc.free}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {msg && (
-          <div style={{
-            marginTop: "10px", fontSize: "12px", color: "var(--accent)",
-            fontFamily: "var(--font-mono)", padding: "7px 10px",
-            background: "rgba(200,240,104,0.06)", borderRadius: "6px",
-            border: "1px solid rgba(200,240,104,0.15)",
-          }}>
-            ✓ {msg}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 const IG_COLOR    = "#F07868";          // Instagram pinkish-orange (coral)
 const IG_COLOR_DIM = "rgba(240,120,104,0.12)";
@@ -226,10 +123,13 @@ export default function ViralLab() {
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Inspirational");
   const [category, setCategory] = useState("Lifestyle");
-  const [result,       setResult]       = useState(null);
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState(null);
-  const [nlpScore,     setNlpScore]     = useState(null);   // content quality NLP score
+  const [result,        setResult]        = useState(null);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState(null);
+  const [nlpScore,      setNlpScore]      = useState(null);
+  const [storyboard,    setStoryboard]    = useState(null);
+  const [sbLoading,     setSbLoading]     = useState(false);
+  const [sbError,       setSbError]       = useState(null);
 
   // Score My Caption state
   const [caption, setCaption] = useState("");
@@ -247,12 +147,29 @@ export default function ViralLab() {
     catch { return 0; }
   })();
 
+  const generateStoryboard = async () => {
+    if (!result?.reel_idea) return;
+    setSbLoading(true); setSbError(null); setStoryboard(null);
+    try {
+      const r = await fetch(config.api.endpoints.generateVideo, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reel_idea: result.reel_idea, script: result.script || result.caption, category, duration: 30 }),
+      });
+      const d = await r.json();
+      if (d.error) setSbError(d.error);
+      else setStoryboard(d);
+    } catch {
+      setSbError('Backend not running — start the server to generate the storyboard.');
+    } finally { setSbLoading(false); }
+  };
+
   const generate = async () => {
     if (!topic.trim()) return;
     try {
       setLoading(true);
       setError(null);
       setResult(null);
+      setStoryboard(null); setSbError(null);
 
       const endpoint = platform === "linkedin"
         ? config.api.endpoints.generateLinkedin
@@ -699,9 +616,33 @@ export default function ViralLab() {
               <ReelAssets result={result} category={category} />
             )}
 
-            {/* One-click video generator launchers */}
+            {/* AI Storyboard + In-Browser Video Creator */}
             {platform === "instagram" && result?.reel_idea && (
-              <QuickVideoLauncher prompt={result.reel_idea + (result.script ? ' ' + result.script.slice(0, 100) : '')} />
+              <div style={{ marginTop: "1.5rem", borderRadius: "var(--radius)", padding: "2px", background: "linear-gradient(135deg, rgba(240,120,104,0.6), rgba(176,104,240,0.5), rgba(200,240,104,0.4))", boxShadow: "0 0 32px rgba(240,120,104,0.15)" }}>
+                <div style={{ background: "linear-gradient(160deg, rgba(17,12,20,0.99), rgba(11,13,15,0.99))", borderRadius: "calc(var(--radius) - 2px)", padding: "1.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", flexShrink: 0, background: "linear-gradient(135deg, rgba(240,120,104,0.25), rgba(176,104,240,0.2))", border: "1px solid rgba(240,120,104,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>🎬</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>Generate Reel Video</div>
+                      <div style={{ fontSize: "11px", color: "var(--text3)", marginTop: "1px" }}>AI storyboard → preview → download video</div>
+                    </div>
+                    <button onClick={generateStoryboard} disabled={sbLoading} style={{ padding: "7px 14px", borderRadius: "100px", cursor: sbLoading ? "wait" : "pointer", background: "rgba(240,120,104,0.12)", border: "1px solid rgba(240,120,104,0.35)", color: "#F07868", fontSize: "11px", fontWeight: 600, opacity: sbLoading ? 0.6 : 1 }}>
+                      {sbLoading ? "⏳ Generating..." : storyboard ? "↻ Regenerate" : "✦ Generate Storyboard"}
+                    </button>
+                    <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "rgba(240,120,104,0.9)", padding: "3px 8px", borderRadius: "20px", background: "rgba(240,120,104,0.1)", border: "1px solid rgba(240,120,104,0.25)" }}>AI-POWERED</div>
+                  </div>
+
+                  {sbError && <div style={{ padding: "8px 12px", background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.25)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "#ff7070", marginBottom: "12px" }}>Failed: {sbError}</div>}
+
+                  {!storyboard && !sbLoading && (
+                    <div style={{ fontSize: "11px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>Click Generate Storyboard → AI creates 4 scene images → Preview & download video</div>
+                  )}
+
+                  {storyboard?.scenes?.length > 0 && (
+                    <ReelVideoCreator scenes={storyboard.scenes} category={category} />
+                  )}
+                </div>
+              </div>
             )}
 
             <FeedbackBar contentKey={`${platform}_${topic}`} result={result} />

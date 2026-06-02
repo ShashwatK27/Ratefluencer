@@ -299,41 +299,76 @@ _CROSS_NICHE_SCORES = {
     ('beauty',  'fashion'):      45,
     ('beauty',  'lifestyle'):    40,
     ('beauty',  'fitness'):      25,
+    ('beauty',  'photography'):  30,
     # Fashion ↔ related
     ('fashion', 'lifestyle'):    50,
     ('fashion', 'beauty'):       45,
     ('fashion', 'entertainment'):30,
+    ('fashion', 'photography'):  40,
+    ('fashion', 'music'):        25,
+    ('fashion', 'sports'):       20,
     # Gaming ↔ Technology (very high overlap — same audience)
     ('gaming',  'technology'):   70,
     ('technology','gaming'):     70,
     ('gaming',  'entertainment'):35,
+    ('gaming',  'comedy'):       30,
     # Fitness ↔ related
     ('fitness', 'wellness'):     65,
     ('fitness', 'lifestyle'):    40,
     ('fitness', 'food'):         30,
+    ('fitness', 'sports'):       55,
+    ('fitness', 'photography'):  20,
     # Wellness ↔ related
     ('wellness','fitness'):      65,
     ('wellness','beauty'):       60,
     ('wellness','lifestyle'):    50,
     ('wellness','food'):         35,
+    ('wellness','travel'):       30,
     # Lifestyle ↔ related (lifestyle overlaps with almost everything)
     ('lifestyle','fashion'):     50,
     ('lifestyle','food'):        45,
     ('lifestyle','travel'):      45,
     ('lifestyle','wellness'):    50,
     ('lifestyle','fitness'):     40,
+    ('lifestyle','photography'): 35,
+    ('lifestyle','family'):      40,
+    ('lifestyle','interior'):    35,
     # Food ↔ related
     ('food',    'lifestyle'):    45,
     ('food',    'wellness'):     35,
     ('food',    'travel'):       30,
+    ('food',    'family'):       30,
     # Travel ↔ related
     ('travel',  'lifestyle'):    45,
     ('travel',  'photography'):  50,
     ('travel',  'food'):         30,
+    ('travel',  'family'):       25,
     # Entertainment ↔ related
     ('entertainment','comedy'):  55,
     ('entertainment','music'):   50,
     ('entertainment','gaming'):  35,
+    ('entertainment','sports'):  35,
+    # Music ↔ related
+    ('music',   'entertainment'):50,
+    ('music',   'comedy'):       30,
+    # Comedy ↔ related
+    ('comedy',  'entertainment'):55,
+    ('comedy',  'music'):        30,
+    # Sports ↔ related
+    ('sports',  'fitness'):      55,
+    ('sports',  'entertainment'):35,
+    # Photography ↔ related
+    ('photography','travel'):    50,
+    ('photography','fashion'):   40,
+    ('photography','lifestyle'):  35,
+    # Family ↔ related
+    ('family',  'lifestyle'):    40,
+    ('family',  'food'):         30,
+    ('family',  'education'):    35,
+    ('family',  'interior'):     25,
+    # Interior ↔ related
+    ('interior','lifestyle'):    35,
+    ('interior','family'):       25,
     # Finance ↔ related
     ('finance', 'business'):     60,
     ('finance', 'education'):    40,
@@ -346,6 +381,7 @@ _CROSS_NICHE_SCORES = {
     ('education','business'):    45,
     ('education','technology'):  40,
     ('education','finance'):     40,
+    ('education','family'):      35,
 }
 
 
@@ -2756,29 +2792,69 @@ def set_groq_key():
 def discover_trends():
     """
     Real trend discovery: Google Trends (primary) + LLM enrichment (fallback).
+    Filters fetched topics for niche relevance before returning — prevents
+    off-niche results (e.g. business news for a beauty creator) from being shown.
     Used by ContentStudio Step 1.
     """
+    # Per-category niche keywords for relevance filtering
+    _NICHE_KEYWORDS = {
+        'Beauty':         ['beauty', 'skincare', 'makeup', 'glow', 'serum', 'skin', 'cosmetic', 'haircare', 'moisturizer', 'foundation', 'lipstick', 'blush', 'spf', 'toner', 'cleanser', 'organic skin'],
+        'Fashion':        ['fashion', 'outfit', 'style', 'clothing', 'ootd', 'dress', 'wear', 'trend', 'wardrobe', 'accessory', 'design', 'couture', 'streetwear'],
+        'Fitness':        ['fitness', 'workout', 'gym', 'exercise', 'training', 'weight', 'muscle', 'cardio', 'yoga', 'health', 'diet', 'nutrition', 'protein', 'run'],
+        'Food':           ['food', 'recipe', 'cook', 'eat', 'meal', 'restaurant', 'cuisine', 'chef', 'bake', 'ingredient', 'dish', 'taste', 'snack', 'drink'],
+        'Travel':         ['travel', 'trip', 'destination', 'explore', 'tour', 'hotel', 'flight', 'vacation', 'adventure', 'backpack', 'itinerary', 'visa'],
+        'Technology':     ['tech', 'ai', 'app', 'software', 'gadget', 'phone', 'device', 'digital', 'internet', 'computer', 'startup', 'innovation', 'robot'],
+        'Finance':        ['invest', 'money', 'stock', 'mutual fund', 'sip', 'finance', 'saving', 'budget', 'wealth', 'portfolio', 'crypto', 'trading'],
+        'Wellness':       ['wellness', 'mental health', 'mindfulness', 'meditation', 'self-care', 'stress', 'sleep', 'ayurved', 'holistic', 'therapy', 'healing'],
+        'Gaming':         ['game', 'gaming', 'esport', 'stream', 'play', 'console', 'mobile game', 'multiplayer', 'twitch', 'minecraft', 'pubg', 'valorant'],
+        'Lifestyle':      ['lifestyle', 'routine', 'morning', 'productivity', 'minimalism', 'habit', 'self improvement', 'motivation', 'vlog', 'day in'],
+        'Music':          ['music', 'song', 'album', 'artist', 'bollywood', 'playlist', 'concert', 'singer', 'rap', 'indie', 'beat', 'track'],
+        'Comedy':         ['comedy', 'funny', 'joke', 'meme', 'laugh', 'humor', 'stand up', 'skit', 'roast', 'parody'],
+        'Education':      ['learn', 'study', 'education', 'course', 'skill', 'knowledge', 'university', 'exam', 'tutorial', 'teach'],
+        'Business':       ['business', 'entrepreneur', 'startup', 'brand', 'marketing', 'revenue', 'growth hacking', 'lead', 'sales', 'company'],
+        'Interior':       ['interior', 'home decor', 'room', 'furniture', 'design', 'makeover', 'house', 'apartment', 'diy decor', 'aesthetic room'],
+        'Pet':            ['pet', 'dog', 'cat', 'animal', 'puppy', 'kitten', 'vet', 'adoption', 'training pet', 'bird'],
+        'Family':         ['family', 'parenting', 'kids', 'children', 'baby', 'mom', 'dad', 'pregnancy', 'toddler', 'school'],
+    }
+
+    def _is_relevant(topic: str, category: str, context: str) -> bool:
+        """Return True if the topic is actually related to the category / context."""
+        text = topic.lower()
+        # Collect candidate keywords
+        cat_keys = _NICHE_KEYWORDS.get(category, [])
+        ctx_words = [w for w in context.lower().split() if len(w) > 3] if context else []
+        all_keys  = cat_keys + ctx_words
+        if not all_keys:
+            return True  # no filter possible → keep
+        return any(k.lower() in text for k in all_keys)
+
     try:
         data     = request.get_json() or {}
         category = data.get("category", "General")
-        context  = data.get("context", "")
+        context  = data.get("context", "").strip()
 
-        # Google Trends primary
+        # Fetch real-data trends
         gt = fetch_combined_trends(category)
-        logger.info(f"discover-trends: Google Trends returned {len(gt)} for '{category}'")
+        logger.info(f"discover-trends: fetched {len(gt)} raw topics for '{category}'")
 
-        if gt:
-            # Quick LLM enrichment for display context
-            topics_txt = "\n".join(f"- {t['topic']}" for t in gt[:5])
-            enrich_prompt = f"""Briefly explain (1 sentence each) why these trending topics matter for a {category} creator{' working with ' + context if context else ''}:
+        # Filter to niche-relevant topics only
+        relevant = [t for t in gt if _is_relevant(t['topic'], category, context)]
+        logger.info(f"discover-trends: {len(relevant)}/{len(gt)} topics passed relevance filter")
+
+        # If we got at least 2 relevant real-data topics, enrich and return them
+        if relevant:
+            niche_label = f"{context} {category}".strip() if context else category
+            topics_txt  = "\n".join(f"- {t['topic']}" for t in relevant[:5])
+            enrich_prompt = f"""You are a social media trend analyst. These are REAL trending topics from Google/Reddit/YouTube.
+Explain in ONE sentence each why they matter specifically for a {niche_label} content creator in India:
 {topics_txt}
-Return ONLY JSON: {{"enriched": [{{"topic": "<topic>", "why_trending": "<1 sentence>"}}]}}"""
+Return ONLY valid JSON: {{"enriched": [{{"topic": "<exact topic>", "why_trending": "<1 sentence specific to {niche_label}>"}}]}}"""
             try:
                 er = groq_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": enrich_prompt}],
-                    temperature=0.4,
-                    max_tokens=400,
+                    temperature=0.3,
+                    max_tokens=500,
                 )
                 emap = {
                     e['topic'].lower(): e.get('why_trending', '')
@@ -2787,28 +2863,46 @@ Return ONLY JSON: {{"enriched": [{{"topic": "<topic>", "why_trending": "<1 sente
             except Exception:
                 emap = {}
 
-            trends = []
-            for t in gt:
-                trends.append({
-                    **t,
-                    'why_trending': emap.get(t['topic'].lower(), t['why_trending']),
-                })
-            return jsonify({"trends": trends, "source": "Google Trends", "data_backed": True}), 200
+            trends = [{**t, 'why_trending': emap.get(t['topic'].lower(), t['why_trending'])} for t in relevant[:5]]
 
-        # LLM fallback
-        prompt = f"""Identify 5 currently trending topics for {category} creators in India{' (brand context: ' + context + ')' if context else ''}.
+            # If still fewer than 4, pad with LLM-generated niche topics
+            if len(trends) < 4:
+                needed = 4 - len(trends)
+                existing = [t['topic'] for t in trends]
+                pad_prompt = f"""Generate {needed} currently trending {niche_label} topics in India (NOT already in this list: {existing}).
+Focus specifically on {niche_label} — ingredients, techniques, products, creators, or social conversations.
+Return ONLY JSON: {{"trends": [{{"topic": "<short title>", "trend_score": <60-90>, "growth_velocity": <60-90>, "audience_fit": 85, "why_trending": "<1 sentence>", "source": "AI Analysis", "data_backed": false}}]}}"""
+                try:
+                    pad_resp = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[{"role": "user", "content": pad_prompt}],
+                        temperature=0.7,
+                        max_tokens=400,
+                    )
+                    pad = _parse_groq_json(pad_resp.choices[0].message.content.strip()).get('trends', [])
+                    trends += pad[:needed]
+                except Exception:
+                    pass
+
+            return jsonify({"trends": trends, "source": "Live Data + AI", "data_backed": True}), 200
+
+        # All fetched topics were off-niche → full LLM generation
+        logger.info(f"discover-trends: no relevant real-data topics → LLM generation for '{category}' / '{context}'")
+        niche_label = f"{context} {category}".strip() if context else category
+        prompt = f"""You are a social media trend expert. Identify 5 trending topics RIGHT NOW for {niche_label} creators in India.
+Be SPECIFIC to {niche_label} — not generic business or unrelated content.
 Return ONLY JSON:
-{{"trends": [{{"topic": "<name>", "trend_score": <0-100>, "growth_velocity": <0-100>,
-  "audience_fit": <0-100>, "why_trending": "<1 sentence>", "source": "<platform>", "data_backed": false}}]}}"""
+{{"trends": [{{"topic": "<specific topic title>", "trend_score": <60-95>, "growth_velocity": <60-95>,
+  "audience_fit": <75-95>, "why_trending": "<1 sentence specific to {niche_label}>", "source": "AI Analysis", "data_backed": false}}]}}"""
         resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
+            temperature=0.65,
             max_tokens=700,
         )
         result = _parse_groq_json(resp.choices[0].message.content.strip())
         trends = sorted(result.get("trends", []), key=lambda x: x.get("trend_score", 0), reverse=True)
-        return jsonify({"trends": trends, "source": "LLM", "data_backed": False}), 200
+        return jsonify({"trends": trends, "source": "AI Analysis", "data_backed": False}), 200
 
     except Exception as e:
         logger.error(f"discover-trends failed: {e}")
@@ -2939,12 +3033,21 @@ def influencer_profile():
         fo           = min(3.0, followers / max(1, followers * 1.2))  # approx F/F ratio
         auth_score   = clamp(70 + (er - 2) * 5 - max(0, fo - 1) * 10)
 
-        # Brand match per niche
+        # Brand match per niche — uses cross-niche affinity dict for differentiation
+        def _cat_match(k: str) -> int:
+            if k == niche:
+                base = 90
+            elif k in niche or niche in k:
+                # Partial string overlap (e.g. 'tech' in 'technology')
+                base = 65
+            else:
+                # Look up cross-niche affinity in both directions; default 15
+                base = _CROSS_NICHE_SCORES.get((niche, k),
+                       _CROSS_NICHE_SCORES.get((k, niche), 15))
+            return int(clamp(base + er * 2))
+
         all_cats = sorted(
-            [{'category': k.title(), 'match': int(clamp(
-                (90 if k == niche else 60 if k in niche or niche in k else 30)
-                + er * 2
-            ))} for k in _NICHE_EXPANSION.keys()],
+            [{'category': k.title(), 'match': _cat_match(k)} for k in _NICHE_EXPANSION.keys()],
             key=lambda x: x['match'], reverse=True
         )
 
@@ -3331,6 +3434,26 @@ def _pollinations_image_url(prompt: str, width: int = 540, height: int = 960,
             f"&model=flux&nologo=true&enhance=true")
 
 
+@app.route("/api/proxy-image", methods=["GET"])
+def proxy_image():
+    """Proxy Pollinations.ai images through backend to resolve browser CORS restrictions."""
+    url = request.args.get("url", "")
+    if not url.startswith("https://image.pollinations.ai/"):
+        return jsonify({"error": "Only Pollinations.ai URLs allowed"}), 400
+    try:
+        import requests as _req
+        resp = _req.get(url, timeout=35, stream=True)
+        ctype = resp.headers.get("Content-Type", "image/jpeg")
+        from flask import make_response
+        response = make_response(resp.content)
+        response.headers["Content-Type"] = ctype
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+    except Exception as e:
+        return jsonify({"error": str(e)}), 504
+
+
 @app.route("/api/generate-video", methods=["POST"])
 @rate_limit("20/hour")
 def generate_video():
@@ -3395,41 +3518,56 @@ Return ONLY valid JSON with 4-5 scenes:
         if not storyboard or not storyboard.get("scenes"):
             return jsonify({"error": "Failed to generate storyboard"}), 500
 
-        # -- Step 2: Add Pollinations image URLs to each scene ---------------
+        # -- Step 2: Build Pollinations URLs for each scene ------------------
         style      = storyboard.get("style", "cinematic")
         palette    = storyboard.get("color_palette", "warm golden")
         base_style = f"{style} style, {palette} color palette, 9:16 vertical, high quality, Instagram reel"
 
-        scenes_with_images = []
-        for i, scene in enumerate(storyboard.get("scenes", [])[:5]):
+        raw_scenes = storyboard.get("scenes", [])[:4]
+        scene_data = []
+        for i, scene in enumerate(raw_scenes):
             visual_prompt = scene.get("visual_prompt") or scene.get("action", concept)
             full_prompt   = f"{visual_prompt}, {category} content, {base_style}"
             image_url     = _pollinations_image_url(full_prompt, seed=42 + i)
+            scene_data.append((scene, image_url, full_prompt))
 
-            scenes_with_images.append({
-                **scene,
-                "image_url":    image_url,
-                "image_prompt": full_prompt[:200],
-            })
+        # -- Step 3: Fetch all images in parallel (avoids single-thread timeout) --
+        import concurrent.futures, base64 as _b64, requests as _req
 
-        # Thumbnail = scene 1 image
-        thumbnail_url = scenes_with_images[0]["image_url"] if scenes_with_images else ""
+        def _fetch_image(args):
+            idx, url = args
+            try:
+                r = _req.get(url, timeout=40)
+                if r.status_code == 200:
+                    ctype = r.headers.get("Content-Type", "image/jpeg")
+                    data  = _b64.b64encode(r.content).decode("utf-8")
+                    return idx, f"data:{ctype};base64,{data}"
+            except Exception as e:
+                logger.warning(f"Pollinations fetch failed scene {idx}: {e}")
+            return idx, None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            results = dict(pool.map(_fetch_image, [(i, sd[1]) for i, sd in enumerate(scene_data)]))
+
+        scenes_with_images = []
+        for i, (scene, image_url, full_prompt) in enumerate(scene_data):
+            entry = {**scene, "image_url": image_url, "image_prompt": full_prompt[:200]}
+            if results.get(i):
+                entry["image_data"] = results[i]   # base64 data URI — no CORS, no proxy needed
+            scenes_with_images.append(entry)
+
+        thumbnail = scenes_with_images[0].get("image_data") or scenes_with_images[0]["image_url"] if scenes_with_images else ""
 
         return jsonify({
-            "status":         "scenes_ready",
-            "provider":       "Pollinations.ai (free AI image generation)",
-            "scenes":         scenes_with_images,
-            "thumbnail_url":  thumbnail_url,
-            "music_mood":     storyboard.get("music_mood", ""),
-            "color_palette":  storyboard.get("color_palette", ""),
-            "style":          storyboard.get("style", ""),
-            "message":        f"Generated {len(scenes_with_images)} visual scenes — images load directly in browser",
-            "total_scenes":   len(scenes_with_images),
+            "status":       "scenes_ready",
+            "provider":     "Pollinations.ai (free AI image generation)",
+            "scenes":       scenes_with_images,
+            "thumbnail_url": thumbnail,
+            "music_mood":   storyboard.get("music_mood", ""),
+            "color_palette": storyboard.get("color_palette", ""),
+            "style":        storyboard.get("style", ""),
+            "total_scenes": len(scenes_with_images),
         }), 200
-
-    except Exception as e:
-        logger.error(f"generate-video failed: {e}")
-        return jsonify({"error": str(e)}), 500
 
     except Exception as e:
         logger.error(f"generate-video failed: {e}")

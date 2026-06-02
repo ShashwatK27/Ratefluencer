@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 const TEAM = [
   {
-    name:  'Shashwat Kulkarni',
+    name:  'Shashwat',
     role:  'Full-Stack & ML Engineer',
     desc:  'Built the backend ML pipeline — XGBoost authenticity model, RandomForest growth engine, LightGBM viral classifier, and the Flask API layer.',
     avatar:'SK',
@@ -180,9 +180,6 @@ export default function AboutPage() {
         {/* Team */}
         <div style={{ marginBottom: '3rem' }}>
           <div className="section-label" style={{ marginBottom: '8px' }}>The Team</div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '26px', marginBottom: '20px' }}>
-            Built in 48 Hours
-          </h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {TEAM.map(member => (
               <div key={member.name} style={{
