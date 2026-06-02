@@ -3277,105 +3277,120 @@ def agent_preferences():
         return jsonify({"error": str(e)}), 500
 
 
+def _pollinations_image_url(prompt: str, width: int = 540, height: int = 960,
+                            seed: int = 42) -> str:
+    """
+    Build a Pollinations.ai image URL.
+    Completely free, no API key, no rate limits for reasonable use.
+    Returns a direct image URL — works as <img src="..."> in the frontend.
+    """
+    import urllib.parse
+    clean = prompt.replace('"', '').replace("'", '').strip()[:300]
+    encoded = urllib.parse.quote(clean)
+    return (f"https://image.pollinations.ai/prompt/{encoded}"
+            f"?width={width}&height={height}&seed={seed}"
+            f"&model=flux&nologo=true&enhance=true")
+
+
 @app.route("/api/generate-video", methods=["POST"])
-@rate_limit("10/hour")
+@rate_limit("20/hour")
 def generate_video():
     """
-    Generate a video from a reel script.
-    Primary: Runway ML Gen-3 API (requires RUNWAYML_API_SECRET in .env).
-    Fallback: Returns a detailed production storyboard that a video editor
-              or Runway's web app can use directly.
+    Visual Storyboard + AI Scene Images powered by Pollinations.ai
+    (free, no API key needed).
+
+    Flow:
+      1. Groq generates a detailed storyboard (scenes, actions, camera angles)
+      2. For each scene, build a Pollinations.ai image URL using the scene
+         description as the visual prompt
+      3. Return scenes with direct image_url fields — the frontend renders
+         actual AI-generated visuals for each scene, not placeholder boxes
+
+    This is simpler and more impressive than trying to generate a video file.
     """
     try:
         data      = request.get_json() or {}
         script    = data.get("script", "").strip()
         reel_idea = data.get("reel_idea", "").strip()
+        hook      = data.get("hook", "").strip()
         category  = data.get("category", "Lifestyle")
         duration  = int(data.get("duration", 30))
 
-        if not script and not reel_idea:
-            return jsonify({"error": "script or reel_idea is required"}), 400
+        if not script and not reel_idea and not hook:
+            return jsonify({"error": "script, reel_idea, or hook is required"}), 400
 
-        runway_key = os.environ.get("RUNWAYML_API_SECRET", "")
+        concept = reel_idea or hook or script[:200]
 
-        # -- Runway ML path ---------------------------------------------------
-        # -- Runway ML path ---------------------------------------------------
-        if runway_key:
-            try:
-                prompt = f"{reel_idea or script[:200]} - {category} content, cinematic, mobile vertical"
-                headers = {
-                    "Authorization": f"Bearer {runway_key}",
-                    "X-Runway-Version": "2024-11-06",
-                    "Content-Type": "application/json",
-                }
-                payload = {
-                    "model":       "gen3a_turbo",
-                    "promptText":  prompt,
-                    "promptImage": "https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png",
-                    "duration":    min(10, duration),
-                    "ratio":       "768:1280",
-                    "watermark":   False,
-                }
-                resp = http_requests.post(
-                    "https://api.dev.runwayml.com/v1/image_to_video",
-                    json=payload, headers=headers, timeout=30,
-                )
-                if resp.status_code in (200, 201):
-                    task = resp.json()
-                    return jsonify({
-                        "status":    "generating",
-                        "task_id":   task.get("id"),
-                        "poll_url":  f"https://api.runwayml.com/v1/tasks/{task.get('id')}",
-                        "message":   "Video is generating. Poll poll_url for status.",
-                        "provider":  "Runway ML Gen-3 Alpha",
-                    }), 202
-            except Exception as re:
-                logger.warning(f"Runway API failed: {re}")
-
-        # -- Storyboard fallback ----------------------------------------------
-        storyboard_prompt = f"""You are a professional video director.
-Create a detailed production storyboard for this {duration}-second reel:
-Concept: {reel_idea or script[:300]}
+        # -- Step 1: Generate storyboard via Groq ----------------------------
+        storyboard_prompt = f"""You are a creative director for short-form vertical video.
+Create a {duration}-second visual storyboard for this concept:
+"{concept}"
 Category: {category}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with 4-5 scenes:
 {{
   "scenes": [
-    {{"id": 1, "start_sec": 0, "end_sec": 3,
-      "shot": "<camera angle>",
-      "action": "<what happens on screen>",
-      "text_overlay": "<any text/caption to display>",
-      "broll_keyword": "<keyword to search for B-roll footage>"}}
+    {{
+      "id": 1,
+      "start_sec": 0,
+      "end_sec": 5,
+      "shot": "close-up / wide / medium / overhead",
+      "action": "What the viewer sees on screen (be specific and visual)",
+      "visual_prompt": "Detailed image generation prompt: subject, lighting, mood, style, setting",
+      "text_overlay": "On-screen text or caption (optional)",
+      "duration_sec": 5
+    }}
   ],
-  "music_mood":      "<upbeat/calm/dramatic/inspirational>",
-  "color_grade":     "<warm/cool/vibrant/muted>",
-  "aspect_ratio":    "9:16",
-  "runway_prompt":   "<optimised text prompt for Runway/Veo generation>",
-  "veo_prompt":      "<Google Veo compatible prompt>",
-  "estimated_duration": {duration}
+  "music_mood": "upbeat / calm / dramatic / inspirational",
+  "color_palette": "warm golden / cool blue / vibrant / moody dark",
+  "style": "cinematic / documentary / trendy / aesthetic"
 }}"""
 
         resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": storyboard_prompt}],
-            temperature=0.6,
-            max_tokens=1000,
+            temperature=0.65,
+            max_tokens=1200,
         )
         storyboard = _parse_groq_json(resp.choices[0].message.content.strip())
-        if not storyboard:
+        if not storyboard or not storyboard.get("scenes"):
             return jsonify({"error": "Failed to generate storyboard"}), 500
 
+        # -- Step 2: Add Pollinations image URLs to each scene ---------------
+        style      = storyboard.get("style", "cinematic")
+        palette    = storyboard.get("color_palette", "warm golden")
+        base_style = f"{style} style, {palette} color palette, 9:16 vertical, high quality, Instagram reel"
+
+        scenes_with_images = []
+        for i, scene in enumerate(storyboard.get("scenes", [])[:5]):
+            visual_prompt = scene.get("visual_prompt") or scene.get("action", concept)
+            full_prompt   = f"{visual_prompt}, {category} content, {base_style}"
+            image_url     = _pollinations_image_url(full_prompt, seed=42 + i)
+
+            scenes_with_images.append({
+                **scene,
+                "image_url":    image_url,
+                "image_prompt": full_prompt[:200],
+            })
+
+        # Thumbnail = scene 1 image
+        thumbnail_url = scenes_with_images[0]["image_url"] if scenes_with_images else ""
+
         return jsonify({
-            "status":     "storyboard_ready",
-            "storyboard": storyboard,
-            "provider":   "AI Storyboard",
-            "message":    (
-                "Full production storyboard generated. "
-                "Set RUNWAYML_API_SECRET in .env to generate actual video with Runway Gen-3."
-            ),
-            "runway_prompt": storyboard.get("runway_prompt", ""),
-            "scenes":        storyboard.get("scenes", []),
+            "status":         "scenes_ready",
+            "provider":       "Pollinations.ai (free AI image generation)",
+            "scenes":         scenes_with_images,
+            "thumbnail_url":  thumbnail_url,
+            "music_mood":     storyboard.get("music_mood", ""),
+            "color_palette":  storyboard.get("color_palette", ""),
+            "style":          storyboard.get("style", ""),
+            "message":        f"Generated {len(scenes_with_images)} visual scenes — images load directly in browser",
+            "total_scenes":   len(scenes_with_images),
         }), 200
+
+    except Exception as e:
+        logger.error(f"generate-video failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
     except Exception as e:
         logger.error(f"generate-video failed: {e}")

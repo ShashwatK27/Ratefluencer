@@ -116,8 +116,9 @@ const VIDEO_SERVICES = [
 ];
 
 function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult }) {
-  const [copied, setCopied] = useState(null);
-  const [toast,  setToast]  = useState('');
+  const [copied,     setCopied]     = useState(null);
+  const [toast,      setToast]      = useState('');
+  const [imgErrors,  setImgErrors]  = useState({});   // track failed image loads
 
   const openService = (svc, prompt) => {
     if (!prompt) {
@@ -187,25 +188,63 @@ function VideoGeneratorCard({ runVideoGeneration, videoLoading, videoResult }) {
           </button>
         </div>
 
-        {/* Storyboard scenes */}
+        {/* Storyboard scenes with Pollinations AI images */}
         {videoResult && (
           <div style={{ marginBottom: "1rem" }}>
-            <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: "8px" }}>
-              Storyboard — {videoResult.scenes?.length || 0} scenes
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+              <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                AI Visual Storyboard — {videoResult.scenes?.length || 0} scenes
+              </div>
+              <span style={{ fontSize: "9px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>
+                powered by Pollinations.ai (free)
+              </span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "10px" }}>
               {videoResult.scenes?.slice(0, 4).map((scene, i) => (
                 <div key={i} style={{
-                  padding: "10px 12px", background: "rgba(200,240,104,0.04)",
-                  border: "1px solid rgba(200,240,104,0.12)", borderRadius: "8px", fontSize: "11px",
+                  background: "var(--bg)", border: "1px solid var(--border)",
+                  borderRadius: "10px", overflow: "hidden", fontSize: "11px",
                 }}>
-                  <div style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "9px", marginBottom: "4px", textTransform: "uppercase" }}>
-                    Scene {scene.id} · {scene.start_sec}s–{scene.end_sec}s · {scene.shot || 'wide'}
-                  </div>
-                  <div style={{ color: "var(--text2)", lineHeight: 1.5 }}>{String(scene.action || '').slice(0, 60)}</div>
-                  {scene.broll_keyword && (
-                    <div style={{ color: "var(--text3)", fontSize: "10px", marginTop: "4px" }}>🎬 {scene.broll_keyword}</div>
+                  {/* AI-generated scene image from Pollinations */}
+                  {scene.image_url && !imgErrors[i] ? (
+                    <div style={{ position: "relative", paddingTop: "56.25%", background: "var(--bg3)" }}>
+                      <img
+                        src={scene.image_url}
+                        alt={"Scene " + (i + 1)}
+                        onError={() => setImgErrors(prev => ({ ...prev, [i]: true }))}
+                        style={{
+                          position: "absolute", inset: 0, width: "100%", height: "100%",
+                          objectFit: "cover", borderRadius: "0",
+                        }}
+                        loading="lazy"
+                      />
+                      <div style={{
+                        position: "absolute", bottom: 0, left: 0, right: 0,
+                        padding: "4px 8px", background: "rgba(0,0,0,0.65)",
+                        fontSize: "9px", color: "#fff", fontFamily: "var(--font-mono)",
+                      }}>
+                        Scene {scene.id} · {scene.start_sec}s–{scene.end_sec}s
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: "10px 12px", background: "rgba(200,240,104,0.04)", minHeight: "80px", display: "flex", alignItems: "center" }}>
+                      <div style={{ fontSize: "10px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>Scene {scene.id}</div>
+                    </div>
                   )}
+                  {/* Scene description */}
+                  <div style={{ padding: "8px 10px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", marginBottom: "3px" }}>
+                      {scene.shot || "wide"} · {scene.duration_sec || (scene.end_sec - scene.start_sec)}s
+                    </div>
+                    <div style={{ color: "var(--text2)", lineHeight: 1.4, fontSize: "11px" }}>
+                      {String(scene.action || '').slice(0, 65)}
+                    </div>
+                    {scene.text_overlay && (
+                      <div style={{ color: "var(--text3)", fontSize: "10px", marginTop: "3px", fontStyle: "italic" }}>
+                        "{scene.text_overlay}"
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
