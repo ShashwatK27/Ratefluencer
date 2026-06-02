@@ -166,7 +166,7 @@ class _RatefluencerScorer:
             self.encoders = joblib.load(_enc_path)
             logger.info(f"Ratefluencer meta-learner loaded ({type(self.model).__name__}, {len(self.features)} features)")
         except Exception as e:
-logger.info(f"Meta-learner load issue (using weighted formula fallback): {type(e).__name__}: {e}")
+            logger.info(f"Meta-learner load issue (using weighted formula fallback): {type(e).__name__}: {e}")
 
     def predict(self, row: dict) -> float:
         """Predict composite Ratefluencer score from raw creator metrics."""
@@ -985,10 +985,10 @@ def generated_scores(row, campaign_text, category_filters, campaign_goal):
         'risk_level':       risk_level,
         'is_fake':          is_fake,
         'success_probability': clamp(final) / 100.0,
-        'pod_detected':     anomalies['pod_detected'],
-        'spike_detected':   anomalies['spike_detected'],
-        'anomaly_flags':    anomalies['flags'],
-        'anomaly_signals':  anomalies['signals'],
+        'pod_detected':     anomalies.get('pod_detected', False),
+        'spike_detected':   anomalies.get('spike_detected', False),
+        'anomaly_flags':    anomalies.get('flags', []),
+        'anomaly_signals':  anomalies.get('signals', anomalies),
     }
 
 
@@ -1667,7 +1667,8 @@ def generate_content():
         insights     = viral_predictor.get_content_insights(content_category)
         best_hours   = insights.get('best_hours', [18, 12, 20])
         best_days    = insights.get('best_days', ['Wednesday', 'Friday'])
-        opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
+        r = insights.get('optimal_hashtag_range', (6, 15))
+        opt_hashtags = tuple(int(x) for x in str(r).split('-')) if isinstance(r, str) else r
         best_media   = insights.get('best_media_type', 'reel')
         style_prefs  = compute_style_preferences(content_category)
 
@@ -1779,7 +1780,27 @@ Return ONLY JSON: {{"category": "<one of: Fitness, Beauty, Fashion, Technology, 
             cat_data = _parse_groq_json(cat_resp.choices[0].message.content.strip())
             detected_category = cat_data.get("category", "Lifestyle")
         except Exception:
-            detected_category = "Lifestyle"
+            # LLM unavailable (rate limit etc.) — detect category from keywords
+            goal_lower = goal.lower()
+            _cat_kw = [
+                ('Finance',  ['finance','invest','money','sip','mutual','fund','crypto','stock','bank']),
+                ('Gaming',   ['gaming','esport','game','gamer','streamer','twitch']),
+                ('Fitness',  ['fitness','gym','workout','yoga','protein','exercise','health']),
+                ('Beauty',   ['skincare','makeup','beauty','glow','serum','hair']),
+                ('Food',     ['food','recipe','cooking','restaurant','diet','nutrition']),
+                ('Travel',   ['travel','trip','tourism','destination','hotel','flight']),
+                ('Fashion',  ['fashion','style','outfit','clothing','apparel','wardrobe']),
+                ('Technology',['tech','app','software','gadget','ai','digital','startup']),
+                ('Business', ['business','entrepreneur','brand','marketing','startup','ceo']),
+                ('Education',['education','course','learning','student','exam','tutor']),
+                ('Wellness', ['wellness','mental','meditation','mindfulness','selfcare']),
+            ]
+            detected_category = 'Lifestyle'
+            for cat, kws in _cat_kw:
+                if any(kw in goal_lower for kw in kws):
+                    detected_category = cat
+                    break
+            logger.info(f"Category detected via keywords (LLM unavailable): {detected_category}")
 
         # Step 1b  -  Real trend from Google Trends
         gt_trends = fetch_combined_trends(detected_category)
@@ -1901,7 +1922,7 @@ Return ONLY JSON: {{"trend": "<topic>", "source": "<platform>", "growth_signal":
         insights     = viral_predictor.get_content_insights(detected_category)
         best_hours   = insights.get('best_hours', [18, 12])
         best_days    = insights.get('best_days', ['Wednesday', 'Friday'])
-        opt_hashtags = insights.get('optimal_hashtag_range', (6, 15))
+        r = insights.get('optimal_hashtag_range', (6, 15)); opt_hashtags = tuple(int(x) for x in str(r).split('-')) if isinstance(r, str) else r
         agent_style  = compute_style_preferences(detected_category)
 
         # Step 3  -  Content refinement loop
@@ -2304,7 +2325,8 @@ def generate_linkedin():
             return jsonify({"error": "topic is required"}), 400
 
         insights     = viral_predictor.get_content_insights(category)
-        opt_hashtags = insights.get('optimal_hashtag_range', (5, 8))
+        _r = insights.get('optimal_hashtag_range', (5, 8))
+        opt_hashtags = tuple(int(x) for x in str(_r).split('-')) if isinstance(_r, str) else _r
 
         # Few-shot feedback learning
         feedback_history = data.get("feedback_history", [])
@@ -2940,7 +2962,8 @@ def generate_script():
 
         insights   = viral_predictor.get_content_insights(category)
         best_hours = insights.get('best_hours', [18, 12])
-        opt_h      = insights.get('optimal_hashtag_range', (6, 15))
+        _oh   = insights.get('optimal_hashtag_range', (6, 15))
+        opt_h = tuple(int(x) for x in str(_oh).split('-')) if isinstance(_oh, str) else _oh
 
         prompt = f"""You are a viral short-form video scriptwriter specialising in Instagram Reels.
 Write a {duration}-second reel script for: "{topic}"
