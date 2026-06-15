@@ -3496,6 +3496,86 @@ def _pollinations_image_url(prompt: str, width: int = 540, height: int = 960,
             f"&model=flux&nologo=true&enhance=true")
 
 
+def _huggingface_image_fetch(prompt: str):
+    """
+    Secondary image source — Hugging Face Inference API (text-to-image).
+    Tried when Pollinations.ai fails. Returns a base64 data URI, or None
+    if HF_API_KEY isn't configured or the call fails.
+    """
+    hf_key = os.environ.get("HF_API_KEY", "")
+    if not hf_key:
+        return None
+    import time as _time
+    model   = os.environ.get("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell")
+    url     = f"https://api-inference.huggingface.co/models/{model}"
+    headers = {"Authorization": f"Bearer {hf_key}"}
+    payload = {"inputs": prompt[:500]}
+    for attempt in range(2):
+        try:
+            r = http_requests.post(url, headers=headers, json=payload, timeout=35)
+            ctype = r.headers.get("Content-Type", "")
+            if r.status_code == 200 and ctype.startswith("image/") and len(r.content) > 1000:
+                data = base64.b64encode(r.content).decode("utf-8")
+                return f"data:{ctype};base64,{data}"
+            if r.status_code == 503 and attempt == 0:
+                wait = min(float(r.json().get("estimated_time", 10)), 12)
+                _time.sleep(wait)
+                continue
+            logger.warning(f"HF image fetch non-image response: {r.status_code} {ctype}")
+        except Exception as e:
+            logger.warning(f"HF image fetch failed: {e}")
+        break
+    return None
+
+
+# -- Branded placeholder visuals (used when Pollinations.ai can't serve an image) --
+_CATEGORY_ICONS = {
+    "beauty": "💄", "fitness": "💪", "fashion": "👗", "food": "🍽️",
+    "tech": "💻", "travel": "✈️", "gaming": "🎮", "wellness": "🧘",
+    "entertainment": "🎬", "music": "🎵", "sports": "🏆", "comedy": "😂",
+    "lifestyle": "✨",
+}
+
+_PALETTE_GRADIENTS = [
+    ("warm",    ("#F4A261", "#5C2E0E")),
+    ("golden",  ("#F4A261", "#5C2E0E")),
+    ("cool",    ("#68B8F0", "#16263B")),
+    ("blue",    ("#68B8F0", "#16263B")),
+    ("vibrant", ("#F07868", "#5C1E5C")),
+    ("dark",    ("#3A3D44", "#0B0D0F")),
+    ("moody",   ("#3A3D44", "#0B0D0F")),
+]
+
+
+def _placeholder_scene_image(category: str, palette: str, width: int = 540, height: int = 960) -> str:
+    """
+    Branded gradient + icon visual, inline as an SVG data URI.
+    Used when Pollinations.ai can't serve a scene image — renders identically
+    to a real image in <img> tags and <canvas drawImage>, so no scene is blank.
+    """
+    icon = _CATEGORY_ICONS.get((category or "").strip().lower(), "✨")
+    palette_l = (palette or "").lower()
+    c1, c2 = "#C8F068", "#1a1c20"
+    for keyword, grad in _PALETTE_GRADIENTS:
+        if keyword in palette_l:
+            c1, c2 = grad
+            break
+    cx, cy = width / 2, height * 0.42
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+        f'<stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/>'
+        f'</linearGradient></defs>'
+        f'<rect width="{width}" height="{height}" fill="url(#g)"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="{width * 0.34}" fill="rgba(255,255,255,0.08)"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="{width * 0.24}" fill="rgba(255,255,255,0.06)"/>'
+        f'<text x="{cx}" y="{cy}" font-size="{int(width * 0.3)}" text-anchor="middle" dominant-baseline="central">{icon}</text>'
+        f'</svg>'
+    )
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
 @app.route("/api/proxy-image", methods=["GET"])
 def proxy_image():
     """Proxy Pollinations.ai images through backend to resolve browser CORS restrictions."""
@@ -3596,32 +3676,36 @@ Return ONLY valid JSON with 4-5 scenes:
             image_url     = _pollinations_image_url(full_prompt, seed=42 + i)
             scene_data.append((scene, image_url, full_prompt))
 
-        # -- Step 3: Fetch all images in parallel (avoids single-thread timeout) --
-        import concurrent.futures, base64 as _b64, requests as _req
+        # -- Step 3: Fetch images sequentially — Pollinations.ai caps concurrent
+        # requests per IP, so parallel fetches mostly fail. Each scene falls
+        # back Pollinations -> Hugging Face -> branded placeholder, so it
+        # never renders blank. --------------------------------------------
+        import time as _time
 
-        def _fetch_image(args):
-            idx, url = args
+        def _fetch_image(url):
             try:
-                r = _req.get(url, timeout=40)
-                if r.status_code == 200:
-                    ctype = r.headers.get("Content-Type", "image/jpeg")
-                    data  = _b64.b64encode(r.content).decode("utf-8")
-                    return idx, f"data:{ctype};base64,{data}"
+                r = http_requests.get(url, timeout=40)
+                ctype = r.headers.get("Content-Type", "")
+                if r.status_code == 200 and ctype.startswith("image/") and len(r.content) > 1000:
+                    data = base64.b64encode(r.content).decode("utf-8")
+                    return f"data:{ctype};base64,{data}"
             except Exception as e:
-                logger.warning(f"Pollinations fetch failed scene {idx}: {e}")
-            return idx, None
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-            results = dict(pool.map(_fetch_image, [(i, sd[1]) for i, sd in enumerate(scene_data)]))
+                logger.warning(f"Pollinations fetch failed: {e}")
+            return None
 
         scenes_with_images = []
         for i, (scene, image_url, full_prompt) in enumerate(scene_data):
-            entry = {**scene, "image_url": image_url, "image_prompt": full_prompt[:200]}
-            if results.get(i):
-                entry["image_data"] = results[i]   # base64 data URI — no CORS, no proxy needed
+            image_data = (
+                _fetch_image(image_url)
+                or _huggingface_image_fetch(full_prompt)
+                or _placeholder_scene_image(category, palette)
+            )
+            entry = {**scene, "image_url": image_url, "image_prompt": full_prompt[:200], "image_data": image_data}
             scenes_with_images.append(entry)
+            if i < len(scene_data) - 1:
+                _time.sleep(0.4)
 
-        thumbnail = scenes_with_images[0].get("image_data") or scenes_with_images[0]["image_url"] if scenes_with_images else ""
+        thumbnail = scenes_with_images[0]["image_data"] if scenes_with_images else ""
 
         return jsonify({
             "status":       "scenes_ready",
