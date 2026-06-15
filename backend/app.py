@@ -3507,7 +3507,7 @@ def _huggingface_image_fetch(prompt: str):
         return None
     import time as _time
     model   = os.environ.get("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell")
-    url     = f"https://api-inference.huggingface.co/models/{model}"
+    url     = f"https://router.huggingface.co/hf-inference/models/{model}"
     headers = {"Authorization": f"Bearer {hf_key}"}
     payload = {"inputs": prompt[:500]}
     for attempt in range(2):
