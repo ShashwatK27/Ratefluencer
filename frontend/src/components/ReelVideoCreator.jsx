@@ -45,12 +45,16 @@ export default function ReelVideoCreator({ scenes, category }) {
   const [currentScene, setCurrentScene] = useState(0);
   const [videoBlob,    setVideoBlob]    = useState(null);
 
+  // Per-scene image load state: null = loading, true = loaded, false = error
+  const [imgLoaded, setImgLoaded] = useState({});
+
   // Reset when scenes change
   useEffect(() => {
     setCanvasImgs(null);
     setVideoBlob(null);
     setPlaying(false);
     setProgress(0);
+    setImgLoaded({});
   }, [scenes]);
 
   // Load images for canvas (only when needed)
@@ -207,16 +211,28 @@ export default function ReelVideoCreator({ scenes, category }) {
             {scenes.slice(0, 4).map((scene, i) => (
               <div key={i} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden", fontSize: "10px" }}>
                 <div style={{ position: "relative", paddingTop: "56%", background: "#0a0a0a" }}>
-                  {/* Direct URL for display — no CORS needed for <img> */}
+                  {/* Loading spinner — shown while image is generating */}
+                  {imgLoaded[i] !== true && imgLoaded[i] !== false && (
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                      <div style={{ width: "16px", height: "16px", border: "2px solid rgba(200,240,104,0.2)", borderTopColor: "#C8F068", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <span style={{ fontSize: "8px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>Generating…</span>
+                    </div>
+                  )}
+                  {/* Error fallback */}
+                  {imgLoaded[i] === false && (
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                      <span style={{ fontSize: "20px" }}>🎬</span>
+                      <span style={{ fontSize: "8px", color: "var(--text3)", fontFamily: "var(--font-mono)" }}>Scene {i + 1}</span>
+                    </div>
+                  )}
                   <img
                     src={scene.image_data || scene.image_url}
                     alt={`Scene ${i + 1}`}
                     loading="eager"
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                    onError={e => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: imgLoaded[i] === true ? "block" : "none" }}
+                    onLoad={() => setImgLoaded(prev => ({ ...prev, [i]: true }))}
+                    onError={() => setImgLoaded(prev => ({ ...prev, [i]: false }))}
                   />
-                  {/* Fallback shown on error */}
-                  <div style={{ position: "absolute", inset: 0, display: "none", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>🎬</div>
                   <div style={{ position: "absolute", top: "4px", left: "4px", background: "rgba(0,0,0,0.7)", borderRadius: "3px", padding: "1px 5px", fontSize: "8px", color: "#C8F068", fontFamily: "var(--font-mono)" }}>
                     S{i + 1} · {scene.start_sec}–{scene.end_sec}s
                   </div>

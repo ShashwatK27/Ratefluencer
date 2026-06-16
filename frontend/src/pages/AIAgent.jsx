@@ -229,6 +229,10 @@ export default function AIAgent() {
           script: result.caption,
           category: result.category,
           duration: 30,
+          trend: result.trend || "",
+          trend_signal: result.trend_signal || "",
+          goal: goal,
+          influencer: result.influencer || "",
         }),
       });
       const d = await r.json();

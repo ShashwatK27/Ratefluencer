@@ -1822,7 +1822,7 @@ def run_agent():
 
         # Step 1a  -  Detect category from goal (lightweight LLM call)
         cat_prompt = f"""Given this campaign goal: "{goal}"
-Return ONLY JSON: {{"category": "<one of: Fitness, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>"}}"""
+Return ONLY JSON: {{"category": "<one of: Fitness, Wellness, Health, Beauty, Fashion, Technology, Food, Lifestyle, Travel, Music, Photography, Comedy>"}}"""
         try:
             cat_resp = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -1839,29 +1839,89 @@ Return ONLY JSON: {{"category": "<one of: Fitness, Beauty, Fashion, Technology, 
         gt_trends = fetch_combined_trends(detected_category)
         logger.info(f"Agent: Google Trends returned {len(gt_trends)} results for '{detected_category}'")
 
-        if gt_trends:
-            top_gt       = gt_trends[0]
-            trend        = top_gt['topic']
-            trend_source = "Google Trends"
-            trend_signal = top_gt['why_trending']
-        else:
-            # LLM fallback for trend discovery
+        def _trend_is_relevant(trend_topic: str, campaign_goal: str) -> bool:
+            """
+            Returns True only when the trend is in the same domain as the goal.
+            Uses keyword overlap as the primary signal; rejects cross-domain trends.
+            """
+            stopwords = {'the', 'a', 'an', 'for', 'of', 'and', 'in', 'to', 'with', 'is', 'on', 'at', 'by', 'from'}
+            goal_words = {w for w in campaign_goal.lower().split() if len(w) > 3 and w not in stopwords}
+            trend_lower = trend_topic.lower()
+
+            # Direct keyword overlap → always relevant
+            if any(w in trend_lower for w in goal_words):
+                return True
+
+            # Domain map — each entry lists signal words that identify that domain
+            DOMAINS = {
+                'skincare':    {'skincare', 'skin', 'glow', 'serum', 'moisturizer', 'cleanser', 'spf', 'sunscreen', 'acne', 'pore', 'toner', 'face', 'complexion'},
+                'beauty':      {'beauty', 'makeup', 'lipstick', 'foundation', 'blush', 'eyeshadow', 'cosmetic', 'nail', 'brow', 'lash'},
+                'fitness':     {'protein', 'supplement', 'gym', 'workout', 'muscle', 'exercise', 'bodybuilding', 'cardio', 'strength', 'training', 'weight loss'},
+                'health':      {'health', 'wellness', 'nutrition', 'diet', 'vitamin', 'medical', 'doctor', 'yoga', 'meditation', 'mental health'},
+                'fashion':     {'fashion', 'outfit', 'clothing', 'style', 'wear', 'dress', 'wardrobe', 'thrift', 'streetwear', 'couture', 'apparel', 'accessories'},
+                'food':        {'food', 'recipe', 'cooking', 'restaurant', 'meal', 'snack', 'cuisine', 'chef', 'vegan', 'baking'},
+                'travel':      {'travel', 'destination', 'hotel', 'resort', 'vacation', 'trip', 'tour', 'honeymoon', 'wedding', 'flight', 'backpacking'},
+                'tech':        {'tech', 'app', 'software', 'gadget', 'smartphone', 'ai', 'startup', 'coding', 'digital'},
+                'finance':     {'finance', 'investing', 'stock', 'crypto', 'money', 'banking', 'wealth', 'budget', 'savings'},
+                'gaming':      {'gaming', 'game', 'esports', 'console', 'streamer', 'twitch'},
+                'entertainment': {'movie', 'series', 'netflix', 'music', 'concert', 'celebrity', 'bollywood', 'comedy'},
+            }
+
+            # Detect which domain(s) the goal and trend each belong to
+            def _detect_domains(text):
+                found = set()
+                text_l = text.lower()
+                for domain, signals in DOMAINS.items():
+                    if any(s in text_l for s in signals):
+                        found.add(domain)
+                return found
+
+            goal_domains  = _detect_domains(campaign_goal)
+            trend_domains = _detect_domains(trend_topic)
+
+            # If both are in known domains with NO overlap → different topics → reject
+            if goal_domains and trend_domains and goal_domains.isdisjoint(trend_domains):
+                return False
+
+            # No keyword overlap and trend is from a clearly unrelated domain → reject
+            if trend_domains and not goal_domains:
+                return False
+
+            return True
+
+        def _fetch_relevant_trend(campaign_goal: str, category: str) -> tuple:
+            """Ask LLM for a trend directly related to the campaign goal."""
             trend_prompt = f"""You are a social media trend analyst.
-For campaign goal: "{goal}" (category: {detected_category}), identify the single most relevant trending topic right now ({pd.Timestamp.now().strftime('%B %Y')}).
-Return ONLY JSON: {{"trend": "<topic>", "source": "<platform>", "growth_signal": "<why in 10 words>"}}"""
+For campaign goal: "{campaign_goal}" (category: {category}), identify the single most relevant trending topic RIGHT NOW that is DIRECTLY about this product/service ({pd.Timestamp.now().strftime('%B %Y')}).
+The trend MUST be about: {campaign_goal}
+Return ONLY JSON: {{"trend": "<topic directly related to {campaign_goal}>", "source": "<platform>", "growth_signal": "<why in 10 words>"}}"""
             try:
                 trend_resp = groq_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": trend_prompt}],
-                    temperature=0.5,
+                    temperature=0.4,
                     max_tokens=200,
                 )
-                trend_data   = _parse_groq_json(trend_resp.choices[0].message.content.strip())
-                trend        = trend_data.get("trend", "Sustainable lifestyle content surging across Gen-Z.")
-                trend_source = trend_data.get("source", "Social Media")
-                trend_signal = trend_data.get("growth_signal", "")
+                trend_data = _parse_groq_json(trend_resp.choices[0].message.content.strip())
+                return (
+                    trend_data.get("trend", f"Growing demand for {campaign_goal}"),
+                    trend_data.get("source", "Social Media"),
+                    trend_data.get("growth_signal", ""),
+                )
             except Exception:
-                trend, trend_source, trend_signal = "Authentic micro-content", "Social Media", ""
+                return (f"Rising interest in {campaign_goal}", "Social Media", "")
+
+        if gt_trends:
+            top_gt = gt_trends[0]
+            if _trend_is_relevant(top_gt['topic'], goal):
+                trend        = top_gt['topic']
+                trend_source = "Google Trends"
+                trend_signal = top_gt['why_trending']
+            else:
+                logger.info(f"Agent: top trend '{top_gt['topic']}' unrelated to goal — fetching goal-specific trend")
+                trend, trend_source, trend_signal = _fetch_relevant_trend(goal, detected_category)
+        else:
+            trend, trend_source, trend_signal = _fetch_relevant_trend(goal, detected_category)
 
         # Step 2  -  Score top 20 candidates; select argmax Ratefluencer score
         df = engine.creators_df.copy()
@@ -1921,19 +1981,24 @@ Return ONLY JSON: {{"trend": "<topic>", "source": "<platform>", "growth_signal":
             )
 
         content_prompt_base = f"""You are a viral content creator for Instagram and LinkedIn.
-Campaign goal: {goal}
-Trending topic: {trend}
-Assigned influencer: {influencer_name} (niche: {influencer_niche})
-Data insight: Best Instagram posting time is {best_hours[0]}:00 on {best_days[0]}, use {opt_hashtags[0]}-{opt_hashtags[1]} hashtags{agent_learned}
 
-Generate content for BOTH platforms tailored to this influencer and trend.
+STRICT RULE: Every word of your output must promote ONLY this specific product/campaign:
+"{goal}"
+
+Do NOT write about any other topic. Do NOT mention {influencer_niche if influencer_niche.lower() not in goal.lower() else "unrelated categories"}, travel, honeymoons, weddings, or anything that is not directly about "{goal}".
+
+Supporting context:
+- Trending angle to weave in: {trend}
+- Post on {best_days[0]} at {best_hours[0]}:00, use {opt_hashtags[0]}-{opt_hashtags[1]} hashtags{agent_learned}
+
+Generate content for BOTH platforms. Every single sentence must be about "{goal}" only.
 Return ONLY JSON (no other text):
 {{
-  "reel_idea": "<creative 1-2 sentence Instagram reel concept>",
-  "caption": "<engaging Instagram caption under 100 words with a clear CTA>",
-  "linkedin_hook": "<one punchy LinkedIn opening line  -  max 15 words>",
-  "linkedin_post": "<professional LinkedIn post 100-150 words with insights and CTA>",
-  "linkedin_hashtags": "<5-7 professional LinkedIn hashtags>"
+  "reel_idea": "<creative 1-2 sentence Instagram reel concept about {goal}>",
+  "caption": "<engaging Instagram caption under 100 words about {goal} with a clear CTA>",
+  "linkedin_hook": "<one punchy LinkedIn opening line about {goal} — max 15 words>",
+  "linkedin_post": "<professional LinkedIn post 100-150 words about {goal} with insights and CTA>",
+  "linkedin_hashtags": "<5-7 professional LinkedIn hashtags relevant to {goal}>"
 }}"""
 
         # Load persisted learned preferences for this category
@@ -3613,11 +3678,15 @@ def generate_video():
     This is simpler and more impressive than trying to generate a video file.
     """
     try:
-        data      = request.get_json() or {}
-        script    = data.get("script", "").strip()
-        reel_idea = data.get("reel_idea", "").strip()
-        hook      = data.get("hook", "").strip()
-        category  = data.get("category", "Lifestyle")
+        data         = request.get_json() or {}
+        script       = data.get("script", "").strip()
+        reel_idea    = data.get("reel_idea", "").strip()
+        hook         = data.get("hook", "").strip()
+        category     = data.get("category", "Lifestyle")
+        trend        = data.get("trend", "").strip()
+        trend_signal = data.get("trend_signal", "").strip()
+        goal         = data.get("goal", "").strip()
+        influencer   = data.get("influencer", "").strip()
 
         if _DEMO_MODE:
             return jsonify({**_DEMO_STORYBOARD}), 200
@@ -3628,11 +3697,24 @@ def generate_video():
 
         concept = reel_idea or hook or script[:200]
 
+        # Build context lines for the prompt — only include what we have
+        context_lines = []
+        if trend:
+            context_lines.append(f"Trending topic: {trend}" + (f" ({trend_signal})" if trend_signal else ""))
+        if goal:
+            context_lines.append(f"Campaign goal: {goal}")
+        if influencer:
+            context_lines.append(f"Influencer: {influencer}")
+        context_block = "\n".join(context_lines)
+
         # -- Step 1: Generate storyboard via Groq ----------------------------
         storyboard_prompt = f"""You are a creative director for short-form vertical video.
 Create a {duration}-second visual storyboard for this concept:
 "{concept}"
 Category: {category}
+{context_block}
+
+Each scene MUST visually reflect the trend and campaign goal above — keep all imagery on-topic and relevant.
 
 Return ONLY valid JSON with 4-5 scenes:
 {{
@@ -3676,15 +3758,14 @@ Return ONLY valid JSON with 4-5 scenes:
             image_url     = _pollinations_image_url(full_prompt, seed=42 + i)
             scene_data.append((scene, image_url, full_prompt))
 
-        # -- Step 3: Fetch images sequentially — Pollinations.ai caps concurrent
-        # requests per IP, so parallel fetches mostly fail. Each scene falls
-        # back Pollinations -> Hugging Face -> branded placeholder, so it
-        # never renders blank. --------------------------------------------
-        import time as _time
+        # -- Step 3: Fetch images in parallel — Pollinations -> HF -> placeholder.
+        # Parallel threads keep total wait ≤ timeout (not timeout × 4 scenes).
+        # The placeholder SVG guarantees no scene is ever blank.
+        import concurrent.futures as _futures
 
         def _fetch_image(url):
             try:
-                r = http_requests.get(url, timeout=40)
+                r = http_requests.get(url, timeout=25)
                 ctype = r.headers.get("Content-Type", "")
                 if r.status_code == 200 and ctype.startswith("image/") and len(r.content) > 1000:
                     data = base64.b64encode(r.content).decode("utf-8")
@@ -3693,19 +3774,21 @@ Return ONLY valid JSON with 4-5 scenes:
                 logger.warning(f"Pollinations fetch failed: {e}")
             return None
 
-        scenes_with_images = []
-        for i, (scene, image_url, full_prompt) in enumerate(scene_data):
+        def _fetch_one(args):
+            i, scene, image_url, full_prompt = args
             image_data = (
                 _fetch_image(image_url)
                 or _huggingface_image_fetch(full_prompt)
                 or _placeholder_scene_image(category, palette)
             )
-            entry = {**scene, "image_url": image_url, "image_prompt": full_prompt[:200], "image_data": image_data}
-            scenes_with_images.append(entry)
-            if i < len(scene_data) - 1:
-                _time.sleep(0.4)
+            return i, {**scene, "image_url": image_url, "image_prompt": full_prompt[:200], "image_data": image_data}
 
-        thumbnail = scenes_with_images[0]["image_data"] if scenes_with_images else ""
+        with _futures.ThreadPoolExecutor(max_workers=4) as pool:
+            raw = list(pool.map(_fetch_one, [(i, scene, image_url, fp) for i, (scene, image_url, fp) in enumerate(scene_data)]))
+        raw.sort(key=lambda x: x[0])
+        scenes_with_images = [r[1] for r in raw]
+
+        thumbnail = scenes_with_images[0].get("image_data") or scenes_with_images[0]["image_url"] if scenes_with_images else ""
 
         return jsonify({
             "status":       "scenes_ready",
